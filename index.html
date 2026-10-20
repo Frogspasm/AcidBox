@@ -2093,7 +2093,7 @@ function renderLearnBadges() {
   });
 }
 function setLearn(on) {
-  learnMode = on; learnTarget = null; learnCC = null;
+  learnMode = on; learnTarget = null; learnCC = null; lastAssigned = null;
   document.body.classList.toggle('learning', on);
   learnBar.hidden = !on;
   midiLearnBtn.setAttribute('aria-pressed', String(on));
@@ -2104,6 +2104,7 @@ function assign(cc, id) {
   if (cc >= 120) { learnMsg.textContent = `CC ${cc} is reserved for note-off messages. Try another control.`; return; }
   for (const [c, pid] of Object.entries(state.midi.learned)) if (pid === id) delete state.midi.learned[c];   // one control per knob
   state.midi.learned[cc] = id;
+  lastAssigned = cc; lastAssignedAt = performance.now();
   save(); renderMap();
   learnTarget = null; learnCC = null;
   learnMsg.textContent = `CC ${cc} now controls ${pname(id)}. Tap another knob, or Done.`;
@@ -2115,12 +2116,22 @@ function learnPick(id) {
   learnMsg.textContent = `${pname(id)} selected. Now turn a control on your controller.`;
   renderLearnBadges();
 }
+// A turning knob sends a stream of messages. Once a control is mapped, the rest of its stream just moves
+// its knob; it must not be caught as a new "control first" pick (that remapped the same control to the next knob).
+let lastAssigned = null, lastAssignedAt = 0;
 function learnGotCC(cc, val) {
+  const now = performance.now();
+  if (cc === lastAssigned && now - lastAssignedAt < 1500) {
+    lastAssignedAt = now;
+    const id = state.midi.learned[cc];
+    if (id) { setParam(id, val / 127); if (knobDraw[id]) knobDraw[id](); }
+    return;
+  }
   if (learnTarget) {
     const id = learnTarget;
     assign(cc, id);
     setParam(id, val / 127); if (knobDraw[id]) knobDraw[id]();
-  } else {
+  } else if (learnCC !== cc) {
     learnCC = cc;
     learnMsg.textContent = `Got CC ${cc}. Now tap the knob it should control.`;
   }
