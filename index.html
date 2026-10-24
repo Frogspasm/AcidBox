@@ -196,6 +196,16 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .drum-mix { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 0 0 14px; padding: 10px 0 8px; border-top: 2px solid var(--track); border-bottom: 2px solid var(--track); }
 .drum-mix .knob svg { width: 46px; height: 46px; }
 .presets { background: var(--panel); border-radius: 24px; padding: 14px 12px 18px; margin-top: 14px; }
+.share-help { margin: 2px 4px 10px; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
+.share-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+.share-grid .export-btn { width: 100%; }
+.share-open { display: flex; margin-top: 10px; }
+.share-open .ghost { flex: 1; }
+/* the Open button is the file picker itself (no hidden input clicked from code, which some in-app browsers block) */
+.file-btn { position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; color: var(--ink); }
+.file-btn:focus-within { outline: 3px solid var(--led); outline-offset: 2px; }
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+@media (min-width: 700px) { .share-grid { grid-template-columns: repeat(4, 1fr); } }
 .preset-save { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 .preset-input { flex: 1 1 180px; min-width: 0; height: 44px; padding: 0 16px; border: 2px solid var(--ink); border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-weight: 600; }
 .preset-input::placeholder { color: var(--ink-soft); font-weight: 400; }
@@ -309,7 +319,24 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .skin-edit summary { cursor: pointer; font-size: 17px; font-weight: 700; }
 .skin-edit-help { margin: 8px 2px 12px; font-size: 14px; color: var(--ink-soft); max-width: 62ch; }
 .skin-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
-.skin-field { display: flex; align-items: center; gap: 12px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--cell); cursor: pointer; }
+.skin-field { display: flex; align-items: center; gap: 12px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--cell); cursor: pointer;
+  border: 0; font: inherit; color: inherit; text-align: left; width: 100%; }
+.skin-field.on { box-shadow: inset 0 0 0 2px var(--led); }
+.skin-sw { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--ink); box-sizing: border-box; }
+.hsl { margin-top: 8px; padding: 12px 14px 14px; border-radius: 18px; background: var(--cell); display: grid; gap: 12px; }
+.hsl[hidden] { display: none; }
+.hsl-head { display: flex; align-items: center; gap: 8px; }
+.hsl-title { flex: 1; font-size: 14px; font-weight: 600; }
+.hsl-hex { width: 6.5em; height: 36px; padding: 0 10px; border-radius: 10px; border: 1.5px solid var(--track); background: var(--panel); color: var(--ink);
+  font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.hsl-row { display: grid; grid-template-columns: 6.2em 1fr; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+.hsl-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 16px; border-radius: 8px; margin: 8px 0; cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); touch-action: pan-y; }
+.hsl-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #fff;
+  border: 3px solid #1a1a1a; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+.hsl-row input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid #1a1a1a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+.hsl-row input[type="range"]::-moz-range-track { background: transparent; }
 .skin-field input[type="color"] { flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid var(--ink); border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
 .skin-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 .skin-field input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
@@ -594,6 +621,24 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
     <div class="preset-list" id="presetList"></div>
   </section>
 
+  <section class="presets share" aria-label="Share" id="shareSec">
+    <div class="song-head"><h2 class="groove-title">Share</h2></div>
+    <p class="share-help">Send your sound, the current pattern, the whole song or your custom skin as a file to anyone, through your phone’s share menu where it’s available. Open a file someone sent you to load it.</p>
+    <div class="preset-save">
+      <input class="preset-input" id="shareName" type="text" maxlength="40" placeholder="File name (optional)" aria-label="File name" autocomplete="off" enterkeyhint="done">
+    </div>
+    <div class="share-grid" role="group" aria-label="What to share">
+      <button class="export-btn" data-share="sound">Sound</button>
+      <button class="export-btn" data-share="pattern" id="sharePattern">Pattern</button>
+      <button class="export-btn" data-share="song">Whole song</button>
+      <button class="export-btn" data-share="skin">Custom skin</button>
+    </div>
+    <div class="share-open">
+      <label class="ghost file-btn" id="openFile">Open a file…<input type="file" id="fileInput" class="file-input"></label>
+    </div>
+    <p class="preset-msg" id="shareMsg" aria-live="polite"></p>
+  </section>
+
   <section class="midi" aria-label="MIDI" id="midiSec" data-ready="false">
     <div class="midi-head">
       <h2 class="groove-title">MIDI</h2>
@@ -633,7 +678,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
     <div class="skins" id="skins" role="group" aria-label="Skin"></div>
     <details class="skin-edit" id="skinEdit">
       <summary>Edit colours</summary>
-      <p class="skin-edit-help">Change any colour to make your own Custom skin. Your first change copies the skin you’re using now, so you can start from any of them.</p>
+      <p class="skin-edit-help">Tap a colour, then drag its sliders: the skin changes as you go. Your first change copies the skin you’re using now, so you can start from any of them.</p>
       <div class="skin-fields" id="skinFields"></div>
       <div class="skin-check" id="skinCheck" aria-live="polite"></div>
       <button class="ghost" id="skinDiscard">Discard custom skin</button>
@@ -2651,35 +2696,129 @@ function currentColors() {
   c.base = state.skin;
   return c;
 }
+// Each colour opens AcidBox's own Hue / Saturation / Lightness sliders. Unlike the device's colour picker
+// (which on phones often reports only when it closes), sliders report every movement, so the skin
+// changes live while you drag.
+let activeKey = null;
 const skinInputs = SKIN_FIELDS.map(([key, name]) => {
-  const field = document.createElement('label');
+  const field = document.createElement('button');
+  field.type = 'button';
   field.className = 'skin-field';
-  const input = document.createElement('input');
-  input.type = 'color';
-  input.setAttribute('aria-label', name);
+  field.setAttribute('aria-expanded', 'false');
+  const sw = document.createElement('span'); sw.className = 'skin-sw'; sw.setAttribute('aria-hidden', 'true');
   const text = document.createElement('span');
   text.className = 'skin-field-text';
   const nm = document.createElement('span'); nm.className = 'skin-field-name'; nm.textContent = name;
   const hex = document.createElement('span'); hex.className = 'skin-field-hex';
   text.append(nm, hex);
-  field.append(input, text);
+  field.append(sw, text);
   skinFieldsEl.appendChild(field);
-  input.addEventListener('input', () => {
-    if (state.skin !== 'custom' || !state.customSkin) state.customSkin = Object.assign({}, currentColors());
-    state.customSkin[key] = input.value.toLowerCase();
+  field.addEventListener('click', () => openColour(key));
+  return { key, name, field, sw, hex };
+});
+
+function hexToHsl(h) {
+  const [r, g, b] = hexRgb(h).map(v => v / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let hh = 0, ss = 0;
+  if (d > 1e-9) {
+    ss = d / (1 - Math.abs(2 * l - 1));
+    hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    hh = (hh * 60 + 360) % 360;
+  }
+  return [Math.round(hh), Math.round(ss * 100), Math.round(l * 100)];
+}
+function hslToHex(h, sat, l) {
+  sat /= 100; l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * sat, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return toHex([r, g, b].map(v => Math.round((v + m) * 255)));
+}
+
+const hslPanel = document.createElement('div');
+hslPanel.className = 'hsl';
+hslPanel.hidden = true;
+hslPanel.innerHTML = `
+  <div class="hsl-head">
+    <span class="hsl-title" id="hslTitle"></span>
+    <input class="hsl-hex" id="hslHex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Colour code">
+    <button class="ghost" id="hslDone" type="button">Done</button>
+  </div>
+  <label class="hsl-row"><span>Hue</span><input type="range" id="hslH" min="0" max="359" step="1"></label>
+  <label class="hsl-row"><span>Saturation</span><input type="range" id="hslS" min="0" max="100" step="1"></label>
+  <label class="hsl-row"><span>Lightness</span><input type="range" id="hslL" min="0" max="100" step="1"></label>`;
+skinFieldsEl.after(hslPanel);
+const hslH = document.getElementById('hslH'), hslS = document.getElementById('hslS'), hslL = document.getElementById('hslL');
+const hslHex = document.getElementById('hslHex'), hslTitle = document.getElementById('hslTitle');
+
+function paintTracks() {
+  const h = +hslH.value, sat = +hslS.value, l = +hslL.value;
+  hslH.style.background = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 359].map(x => `hsl(${x} 85% 52%)`).join(', ')})`;
+  hslS.style.background = `linear-gradient(to right, hsl(${h} 0% ${l}%), hsl(${h} 100% ${l}%))`;
+  hslL.style.background = `linear-gradient(to right, hsl(${h} ${sat}% 0%), hsl(${h} ${sat}% 50%), hsl(${h} ${sat}% 100%))`;
+}
+function openColour(key) {
+  if (activeKey === key) { closeColour(); return; }
+  activeKey = key;
+  const c = currentColors()[key];
+  [hslH.value, hslS.value, hslL.value] = hexToHsl(c);
+  hslHex.value = c.toUpperCase();
+  hslTitle.textContent = SKIN_FIELDS.find(f => f[0] === key)[1];
+  hslPanel.hidden = false;
+  paintTracks();
+  renderSkinEditor();
+}
+function closeColour() {
+  const k = activeKey;
+  activeKey = null;
+  hslPanel.hidden = true;
+  renderSkinEditor();
+  const f = skinInputs.find(x => x.key === k);
+  if (f) f.field.focus();
+}
+document.getElementById('hslDone').addEventListener('click', closeColour);
+
+// apply at most once per frame, however fast the slider moves
+let skinFrame = 0;
+function setColour(key, hex) {
+  if (state.skin !== 'custom' || !state.customSkin) state.customSkin = Object.assign({}, currentColors());
+  state.customSkin[key] = hex;
+  if (skinFrame) return;
+  skinFrame = requestAnimationFrame(() => {
+    skinFrame = 0;
     customBtn.hidden = false;
     customBtn.querySelector('svg').outerHTML = swatch(customSwatch());
     applySkin('custom');
     save();
   });
-  return { key, input, hex };
+}
+[hslH, hslS, hslL].forEach(r => r.addEventListener('input', () => {
+  if (!activeKey) return;
+  const hex = hslToHex(+hslH.value, +hslS.value, +hslL.value);
+  hslHex.value = hex.toUpperCase();
+  paintTracks();
+  setColour(activeKey, hex);
+}));
+hslHex.addEventListener('input', () => {
+  let v = hslHex.value.trim();
+  if (v && v[0] !== '#') v = '#' + v;
+  if (!activeKey || !/^#[0-9a-f]{6}$/i.test(v)) return;
+  [hslH.value, hslS.value, hslL.value] = hexToHsl(v);
+  paintTracks();
+  setColour(activeKey, v.toLowerCase());
 });
+hslHex.addEventListener('blur', () => { if (activeKey) hslHex.value = currentColors()[activeKey].toUpperCase(); });
 function rate(r) {
   return r >= 7 ? 'very easy to read' : r >= 4.5 ? 'easy to read' : r >= 3 ? 'OK for big text only' : 'hard to read';
 }
 function renderSkinEditor() {
   const c = currentColors();
-  skinInputs.forEach(({ key, input, hex }) => { input.value = c[key]; hex.textContent = c[key].toUpperCase(); });
+  skinInputs.forEach(({ key, field, sw, hex }) => {
+    sw.style.background = c[key];
+    hex.textContent = c[key].toUpperCase();
+    field.setAttribute('aria-expanded', String(key === activeKey));
+    field.classList.toggle('on', key === activeKey);
+  });
   const checks = [['Text on background', c.ink, c.bg, 4.5], ['Text on cells', c.ink, c.cell, 4.5],
     ['Secondary text on panels', c.soft, c.panel, 4.5], ['Accent on panels', c.led, c.panel, 3]];
   skinCheck.innerHTML = '';
@@ -2873,11 +3012,192 @@ function renderPresets() {
     del.className = 'ghost'; del.textContent = 'Delete';
     del.setAttribute('aria-label', `Delete ${pr.name}`);
     del.addEventListener('click', () => deletePreset(i, del));
-    row.append(info, load, del);
+    const shr = document.createElement('button');
+    shr.className = 'ghost'; shr.textContent = 'Share';
+    shr.setAttribute('aria-label', `Share ${pr.name}`);
+    shr.addEventListener('click', () => sharePreset(i));
+    row.append(info, load, shr, del);
     presetList.appendChild(row);
   });
 }
 renderPresets();
+
+// ===================== Share and open files =====================
+// One file format for every AcidBox (web, Android, plugin): JSON named *.acidbox.json.
+// kind "sound": params · "pattern": one bass line + one drum pattern · "song": tempo, sound, all
+// patterns and the song chain · "skin": custom skin colours.
+const ACIDBOX_FILE = 1;
+const shareMsg = document.getElementById('shareMsg');
+const shareName = document.getElementById('shareName');
+const fileInput = document.getElementById('fileInput');
+function shareSay(t) { shareMsg.textContent = t; }
+const fileSafe = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+
+function soundOnly(params) { const { tempo, ...sound } = params; return clone(sound); }
+function makeFile(kind, name, src) {
+  const f = { acidbox: ACIDBOX_FILE, kind, name };
+  if (kind === 'sound') f.params = soundOnly(src.params);
+  else if (kind === 'pattern') { f.bass = clone(src.bass); f.drums = clone(src.drums); }
+  else if (kind === 'song') Object.assign(f, { tempo: src.tempo, params: soundOnly(src.params), banks: clone(src.banks), drumBanks: clone(src.drumBanks), song: clone(src.song), songOn: !!src.songOn });
+  else if (kind === 'skin') f.colors = clone(src.colors);
+  return f;
+}
+
+async function shareFile(file) {
+  const json = JSON.stringify(file, null, 1);
+  const filename = (fileSafe(file.name) || 'AcidBox') + '.acidbox.json';
+  // 1. the phone's share menu, where the browser and the Claude app allow it
+  try {
+    const f = new File([json], filename, { type: 'application/json' });
+    if (navigator.canShare && navigator.share && navigator.canShare({ files: [f] })) {
+      await navigator.share({ files: [f], title: file.name });
+      shareSay(`Shared “${file.name}”.`);
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') { shareSay('Sharing cancelled.'); return; }
+    // anything else (not allowed here): fall through to saving the file
+  }
+  // 2. otherwise save it, ready to send from Files or Downloads
+  await downloadsReady;
+  if (!downloadsApi) { shareSay('Sharing and saving files aren’t available here.'); return; }
+  try {
+    await downloadsApi.save({ filename, data: json });
+    shareSay(`Saved ${filename}. Send it from your Files or Downloads app.`);
+  } catch (e) {
+    const code = e && e.code;
+    shareSay(code === 'declined' ? 'Not saved.' : code === 'rate_limited' ? 'One moment, then try again.' : 'Couldn’t save the file here.');
+  }
+}
+
+document.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click', () => {
+  const kind = b.dataset.share, typed = shareName.value.trim();
+  if (kind === 'sound') shareFile(makeFile('sound', typed || 'AcidBox sound', { params: state.params }));
+  else if (kind === 'pattern') {
+    const label = LETTERS[state.bank] + (state.dbank !== state.bank ? ' / drums ' + LETTERS[state.dbank] : '');
+    shareFile(makeFile('pattern', typed || 'AcidBox pattern ' + label, { bass: state.banks[state.bank], drums: state.drumBanks[state.dbank] }));
+  } else if (kind === 'song') {
+    shareFile(makeFile('song', typed || 'AcidBox song', { tempo: state.params.tempo, params: state.params, banks: state.banks, drumBanks: state.drumBanks, song: state.song, songOn: state.songOn }));
+  } else if (kind === 'skin') {
+    if (!state.customSkin) { shareSay('Make a custom skin first: pick its colours in the Skin section.'); return; }
+    const { base, ...colors } = state.customSkin;
+    shareFile(makeFile('skin', typed || 'AcidBox skin', { colors }));
+  }
+}));
+
+function sharePreset(i) {
+  const pr = presets[i];
+  if (!pr) return;
+  if (pr.kind === 'full') shareFile(makeFile('song', pr.name, { tempo: pr.tempo || state.params.tempo, params: pr.params, banks: pr.banks || state.banks, drumBanks: pr.drumBanks || state.drumBanks, song: pr.song || state.song, songOn: state.songOn }));
+  else shareFile(makeFile('sound', pr.name, { params: pr.params }));
+}
+
+// ---------- opening: check everything, since a file can come from anyone
+const CHOICES = { wave: [0, 4], wave2: [0, 4], dtype: [-1, 3], rmode: [-1, 2], space: [0, 1], ftype: [0, 1], cmp: [0, 1] };
+function cleanParams(p) {
+  const out = {};
+  if (!p || typeof p !== 'object') return out;
+  for (const [k, v] of Object.entries(p)) {
+    if (k === 'tempo' || !(k in DEFAULT_PARAMS) || typeof v !== 'number' || !isFinite(v)) continue;
+    if (k === 'interval') { if ([-12, 0, 7, 12].includes(v)) out[k] = v; }
+    else if (CHOICES[k]) out[k] = Math.max(CHOICES[k][0], Math.min(CHOICES[k][1], Math.round(v)));
+    else out[k] = Math.max(0, Math.min(1, v));
+  }
+  return out;
+}
+const cleanStep = x => (x && typeof x === 'object')
+  ? { n: Math.max(0, Math.min(12, x.n | 0)), o: Math.max(-1, Math.min(1, x.o | 0)), a: !!x.a, s: !!x.s, r: !!x.r }
+  : R();
+const cleanBass = arr => Array.isArray(arr) ? Array.from({ length: 16 }, (_, i) => cleanStep(arr[i])) : null;
+const cleanDrums = arr => Array.isArray(arr) ? Array.from({ length: 16 }, (_, i) => Math.max(0, arr[i] | 0) & 31) : null;
+const HEX = /^#[0-9a-f]{6}$/i;
+
+function refreshAfterLoad() {
+  engine.send({ type: 'params', params: { ...state.params } });
+  for (let b = 0; b < 4; b++) sendBank(b);
+  sendSong();
+  tempoVal.textContent = state.params.tempo;
+  Object.values(knobDraw).forEach(f => f());
+  waveRenders.forEach(f => f());
+  renderIntervals(); renderDistTypes(); renderRingModes(); renderSpace(); renderFilter(); renderComp();
+  renderSteps(); renderEditor(); renderGroove(); renderSongChain();
+  save();   // also records the load as one Undo step
+}
+
+async function openFile(f) {
+  if (!f) return;
+  if (f.size > 512 * 1024) { shareSay('That file is too big to be an AcidBox file.'); return; }
+  let d;
+  // any file can be picked (phones often don't recognise .acidbox.json as JSON); the contents decide
+  const readText = file => file.text ? file.text() : new Promise((ok, fail) => {
+    const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => fail(r.error); r.readAsText(file);
+  });
+  shareSay('Opening…');
+  try { d = JSON.parse(await readText(f)); } catch (e) { shareSay('That isn’t an AcidBox file.'); return; }
+  if (!d || typeof d !== 'object' || typeof d.acidbox !== 'number') { shareSay('That isn’t an AcidBox file.'); return; }
+  const name = fileSafe(d.name) || 'Shared ' + (d.kind || 'file');
+  const newer = d.acidbox > ACIDBOX_FILE ? ' It was made with a newer AcidBox, so some settings may be missing.' : '';
+
+  if (d.kind === 'sound') {
+    state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo: state.params.tempo });
+    refreshAfterLoad();
+    addSharedPreset({ name, kind: 'sound', saved: Date.now(), params: soundOnly(state.params) });
+    shareSay(`Loaded the sound “${name}” and added it to your presets. Tap Undo to go back.` + newer);
+  } else if (d.kind === 'pattern') {
+    const bass = cleanBass(d.bass), drums = cleanDrums(d.drums);
+    if (!bass && !drums) { shareSay('That pattern file is empty.'); return; }
+    if (bass) state.banks[state.bank] = bass;
+    if (drums) state.drumBanks[state.dbank] = drums;
+    refreshAfterLoad();
+    shareSay(`Loaded “${name}” into pattern ${LETTERS[state.bank]}${state.dbank !== state.bank ? ' and drums ' + LETTERS[state.dbank] : ''}. Tap Undo to go back.` + newer);
+  } else if (d.kind === 'song') {
+    const banks = Array.isArray(d.banks) ? [0, 1, 2, 3].map(i => cleanBass(d.banks[i]) || emptyPattern()) : null;
+    const drumBanks = Array.isArray(d.drumBanks) ? [0, 1, 2, 3].map(i => cleanDrums(d.drumBanks[i]) || emptyDrums()) : null;
+    const tempo = typeof d.tempo === 'number' && isFinite(d.tempo) ? Math.max(60, Math.min(200, Math.round(d.tempo))) : state.params.tempo;
+    state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo });
+    if (banks) state.banks = banks;
+    if (drumBanks) state.drumBanks = drumBanks;
+    if (Array.isArray(d.song) && d.song.length) state.song = normSong(d.song);
+    refreshAfterLoad();
+    addSharedPreset({ name, kind: 'full', saved: Date.now(), params: soundOnly(state.params), tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
+    shareSay(`Loaded the song “${name}” and added it to your presets. Tap Undo to go back.` + newer);
+  } else if (d.kind === 'skin') {
+    const c = d.colors || {};
+    const keys = ['bg', 'panel', 'cell', 'ink', 'soft', 'led'];
+    if (!keys.every(k => typeof c[k] === 'string' && HEX.test(c[k]))) { shareSay('That skin file is missing some colours.'); return; }
+    state.customSkin = Object.fromEntries(keys.map(k => [k, c[k].toLowerCase()]));
+    customBtn.hidden = false;
+    customBtn.querySelector('svg').outerHTML = swatch(customSwatch());
+    applySkin('custom');
+    save();
+    shareSay(`Now using the skin “${name}” as your custom skin.`);
+  } else {
+    shareSay('This AcidBox file holds something this version can’t open yet.');
+  }
+}
+function addSharedPreset(p) {
+  let n = p.name, k = 2;
+  while (presets.some(x => x.name.toLowerCase() === n.toLowerCase())) n = `${p.name} (${k++})`;
+  p.name = n;
+  presets.unshift(p);
+  if (!storePresets()) presets.shift();
+  renderPresets();
+}
+
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) { shareSay('No file was picked.'); return; }
+  openFile(f).finally(() => { fileInput.value = ''; });
+});
+// on a computer, drop a file anywhere on the page
+document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  e.preventDefault();
+  openFile(f);
+  document.getElementById('shareSec').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
 </script>
 </body>
 </html>
