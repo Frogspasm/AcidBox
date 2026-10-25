@@ -137,6 +137,16 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
   font-variation-settings: "opsz" 96;
 }
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* Play, tempo and Undo/Redo move into this bar pinned to the top once they reach the top of the screen.
+   The swap happens exactly where they already are, so they never move; only the bar's background fades. */
+.dock { position: fixed; z-index: 45; top: 0; left: 0; right: 0; pointer-events: none; visibility: hidden;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) max(clamp(12px, 4vw, 36px), env(safe-area-inset-right, 0px)) 8px max(clamp(12px, 4vw, 36px), env(safe-area-inset-left, 0px)); }
+.dock::before { content: ""; position: absolute; inset: 0; background: var(--bg); box-shadow: 0 10px 18px -14px rgba(0, 0, 0, 0.55);
+  opacity: 0; transition: opacity .15s ease; }
+.dock.show { visibility: visible; pointer-events: auto; }
+.dock.show::before { opacity: 1; }
+.dock-in { position: relative; max-width: 1080px; margin: 0 auto; display: flex; }
+@media (prefers-reduced-motion: reduce) { .dock::before { transition: none; } }
 
 .play {
   min-width: 104px; height: 56px; padding: 0 22px;
@@ -457,6 +467,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 <main class="rig">
   <header class="top">
     <h1 class="brand">AcidBox</h1>
+    <div class="transport-home" id="transportHome">
     <div class="transport">
       <button id="play" class="play" aria-pressed="false">Play</button>
       <div class="pill" role="group" aria-label="Tempo">
@@ -469,6 +480,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
         <button class="round" id="undo" aria-label="Undo" title="Undo (Ctrl+Z)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button class="round" id="redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
+    </div>
     </div>
   </header>
 
@@ -3259,6 +3271,49 @@ document.addEventListener('drop', e => {
 const skinsFold = document.getElementById('skinsFold');
 try { skinsFold.open = localStorage.getItem('acidbox.skinsOpen') === '1'; } catch (e) {}
 skinsFold.addEventListener('toggle', () => { try { localStorage.setItem('acidbox.skinsOpen', skinsFold.open ? '1' : '0'); } catch (e) {} });
+
+// ===================== Transport stays on screen =====================
+// When Play, tempo and Undo/Redo reach the top of the screen, the same controls move into a bar pinned
+// there, at exactly the spot they already occupy, so they don't visibly move; scroll back and they return
+// to the header the same way. Their place in the header keeps its height meanwhile.
+(() => {
+  const home = document.getElementById('transportHome');
+  const controls = home.querySelector('.transport');
+  const dock = document.createElement('div');
+  dock.className = 'dock';
+  dock.innerHTML = '<div class="dock-in"></div>';
+  document.body.appendChild(dock);
+  const dockIn = dock.firstChild;
+  let docked = false;
+  // where the controls sit in the bar: its top padding, which includes the notch area
+  const dockY = () => parseFloat(getComputedStyle(dock).paddingTop) || 8;
+  const setDocked = on => {
+    if (on === docked) return;
+    docked = on;
+    if (on) {
+      const x = controls.getBoundingClientRect().left;   // keep them at the same horizontal spot
+      // hold the empty spot at its full size, width too: otherwise the header can reflow (on phones the
+      // title and controls would fit on one line) and everything below would jump
+      home.style.width = home.offsetWidth + 'px';
+      home.style.height = home.offsetHeight + 'px';
+      home.style.flex = 'none';
+      dockIn.style.paddingLeft = '0px';
+      dockIn.appendChild(controls);
+      dock.classList.add('show');
+      dockIn.style.paddingLeft = Math.max(0, x - controls.getBoundingClientRect().left) + 'px';
+    } else {
+      home.appendChild(controls);
+      home.style.width = home.style.height = home.style.flex = '';
+      dock.classList.remove('show');
+    }
+  };
+  let queued = false;
+  const check = () => { queued = false; setDocked(home.getBoundingClientRect().top <= dockY()); };
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(check); } };
+  window.addEventListener('scroll', queue, { passive: true });
+  window.addEventListener('resize', () => { setDocked(false); queue(); });
+  check();
+})();
 </script>
 </body>
 </html>
