@@ -214,6 +214,14 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .drum-mix { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 0 0 14px; padding: 10px 0 8px; border-top: 2px solid var(--track); border-bottom: 2px solid var(--track); }
 .drum-mix .knob svg { width: 46px; height: 46px; }
 .presets { background: var(--panel); border-radius: 24px; padding: 14px 12px 18px; margin-top: 14px; }
+.meter { flex: 1; min-width: 120px; display: grid; gap: 4px; }
+.meter > div { height: 8px; border-radius: 4px; background: var(--cell); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--ink); transition: width .06s linear; }
+.meter i.hot { background: var(--led); }
+.clip { flex: none; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  background: var(--cell); color: var(--ink-soft); }
+.clip.on { background: var(--led); color: var(--on-led); }
+.peak-read { font-size: 13px; color: var(--ink-soft); margin: -4px 0 4px; font-variant-numeric: tabular-nums; }
 .share-help { margin: 2px 4px 10px; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
 .share-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
 .share-grid .export-btn { width: 100%; }
@@ -523,6 +531,19 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
     </div>
     <div class="osc-knobs" id="filterKnobs"></div>
   </section>
+
+  <section class="osc dist out" aria-label="Output">
+    <div class="osc-rows">
+      <div class="osc-row"><span class="osc-label">Output</span>
+        <div class="meter" id="meter" role="img" aria-label="Output level meter"><div><i id="mL"></i></div><div><i id="mR"></i></div></div>
+        <span class="clip" id="clipLed">Clip</span>
+      </div>
+      <div class="peak-read" id="peakRead" aria-live="off">Peak: silent</div>
+      <div class="osc-row"><span class="osc-label">Sample rate</span><div class="pill seg" role="group" aria-label="Sample rate" id="rateModes"></div></div>
+      <div class="peak-read" id="rateRead"></div>
+    </div>
+    <div class="osc-knobs" id="outKnobs"></div>
+  </section>
   </div>
 
   <div class="col col-pattern">
@@ -721,7 +742,7 @@ class AcidCore {
     this.sr = sr;
     this.p = { tune: 0.5, cutoff: 0.35, reso: 0.7, envmod: 0.6, decay: 0.35, accent: 0.6, drive: 0.3, delay: 0.25, tempo: 125, wave: 0, wave2: 0, interval: 0, morph: 0, detune: 0.5, dlevel: 0.7, kdecay: 0.5, blevel: 0.8, duck: 0.45, ducktime: 0.4, reverb: 0.3, rsize: 0.5, dtype: 0, dist: 0, dtone: 0.6, dmix: 1, lvk: 0.8, lvs: 0.8, lvc: 0.8, lvch: 0.8, lvoh: 0.8, rmode: 0, ring: 0, rpitch: 0.5,
       cmp: 0, cthr: 2 / 3, cratio: 0.4, catk: 0.741, crel: 0.431, cgain: 1 / 3, cmix: 1,
-      space: 1, ftype: 0, fslope: 1, fslopeenv: 0,
+      space: 1, ftype: 0, fslope: 1, fslopeenv: 0, outlvl: 1,
       ktune: 0.5, kpunch: 0.4, ksweep: 0.5, kclick: 0.5, kdrive: 0.5, stune: 0.5, ssnap: 0.5, stone: 0.5, sdecay: 0.5,
       ctone: 0.5, cspread: 0.5, cdecay: 0.5, chtune: 0.5, chtone: 0.5, chdecay: 0.5, chnoise: 0.5, ohtune: 0.5, ohtone: 0.5, ohdecay: 0.5, ohnoise: 0.5 };
     const rest = () => Array.from({ length: 16 }, () => ({ n: 0, o: 0, a: false, s: false, r: true }));
@@ -907,6 +928,8 @@ class AcidCore {
     const duckRelC = Math.exp(-1 / ((0.04 + p.ducktime * 0.36) * sr));
     const revMix = p.reverb * 1.8;
     const revFb = 0.72 + p.rsize * 0.26;
+    // Output level: 0 dB at the top (unchanged), down to -30 dB, applied after the final limiter for headroom
+    const outG = p.outlvl === undefined || p.outlvl >= 0.999 ? 1 : Math.pow(10, (p.outlvl - 1) * 30 / 20);
     // Space switch: when off, the echo and reverb don't run at all. Turning it back on starts from silence.
     const spaceOn = p.space !== 0;
     if (spaceOn && !this.spaceWasOn) {
@@ -1118,8 +1141,8 @@ class AcidCore {
       }
       // silence needs no saturation (tanh(0) is exactly 0)
       if (dry === 0 && revL === 0 && revR === 0) { L[i] = 0; R[i] = 0; continue; }
-      L[i] = Math.tanh(dry + revL * revMix);
-      R[i] = Math.tanh(dry + revR * revMix);
+      L[i] = Math.tanh(dry + revL * revMix) * outG;
+      R[i] = Math.tanh(dry + revR * revMix) * outG;
     }
   }
   clearReverb() {
@@ -1210,8 +1233,13 @@ class AcidProc extends AudioWorkletProcessor {
     this.port.onmessage = (e) => this.core.apply(e.data);
   }
   process(inputs, outputs) {
-    const o = outputs[0];
-    this.core.process(o[0], o[1] || o[0], o[0].length);
+    const o = outputs[0], l = o[0], r = o[1] || o[0];
+    this.core.process(l, r, l.length);
+    // output meter: peaks, posted about 20 times a second
+    let pl = this.pl || 0, pr = this.pr || 0;
+    for (let i = 0; i < l.length; i++) { const a = l[i] < 0 ? -l[i] : l[i], b = r[i] < 0 ? -r[i] : r[i]; if (a > pl) pl = a; if (b > pr) pr = b; }
+    this.pl = pl; this.pr = pr; this.mn = (this.mn || 0) + l.length;
+    if (this.mn >= sampleRate / 20) { this.port.postMessage({ m: [pl, pr] }); this.pl = this.pr = 0; this.mn = 0; }
     return true;
   }
 }
@@ -1220,6 +1248,8 @@ registerProcessor('acid-proc', AcidProc);
 
 
 // ===================== Audio engine wrapper =====================
+// Sample rate: Auto lets the device decide (usually 48 kHz on phones); 44.1 kHz matches samplers like the MPC.
+function chosenRate() { try { return +localStorage.getItem('acidbox.rate') || 0; } catch (e) { return 0; } }
 // iPhones treat web audio like game sound effects: muted by the Ring/Silent switch. Music apps aren't,
 // because they play as "media". Ask for media playback (iOS 17+), and on older iPhones play a silent
 // looping clip, which switches the page into the same media mode.
@@ -1250,7 +1280,9 @@ const engine = {
     if (this.ready) return this.ready;
     mediaMode();
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new Ctx({ latencyHint: 'interactive' });
+    const rate = chosenRate();
+    try { this.ctx = new Ctx(rate ? { latencyHint: 'interactive', sampleRate: rate } : { latencyHint: 'interactive' }); }
+    catch (e) { this.ctx = new Ctx({ latencyHint: 'interactive' }); }   // this browser can't run at that rate
     this.ctx.resume();
     // When headphones or Bluetooth disconnect, phones can pause ("interrupt") the page's audio. Try to
     // carry on straight away; if that isn't allowed, the next tap on Play brings it back.
@@ -1280,7 +1312,7 @@ const engine = {
         }
         if (!loaded) throw lastErr || new Error('worklet failed');
         this.node = new AudioWorkletNode(this.ctx, 'acid-proc', { numberOfInputs: 0, outputChannelCount: [2] });
-        this.node.port.onmessage = (e) => (typeof e.data === 'number' ? showPlaying(e.data) : showBar(e.data));
+        this.node.port.onmessage = (e) => (typeof e.data === 'number' ? showPlaying(e.data) : e.data && e.data.m ? meterFeed(e.data.m[0], e.data.m[1]) : showBar(e.data));
         this.mode = 'worklet';
       } catch (err) {
         // remember why, for the diagnostics panel
@@ -1294,7 +1326,11 @@ const engine = {
         this.node.onaudioprocess = (e) => {
           const t0 = performance.now();
           const b = e.outputBuffer;
-          this.core.process(b.getChannelData(0), b.getChannelData(1), b.length);
+          const l = b.getChannelData(0), r = b.getChannelData(1);
+          this.core.process(l, r, b.length);
+          let pl = 0, pr = 0;
+          for (let i = 0; i < l.length; i++) { const x = Math.abs(l[i]), y = Math.abs(r[i]); if (x > pl) pl = x; if (y > pr) pr = y; }
+          meterFeed(pl, pr);
           const s = this.stats, work = performance.now() - t0;
           if (s.last && t0 - s.last > budget * 2) s.late++;   // the page was too busy to call us in time
           s.last = t0; s.calls++; s.total += work; if (work > s.worst) s.worst = work;
@@ -1306,6 +1342,7 @@ const engine = {
       for (let i = 0; i < 4; i++) sendBank(i);
       sendLoop();
       sendSong();
+      renderRate();
     })();
     return this.ready;
   },
@@ -1313,6 +1350,16 @@ const engine = {
     if (!this.node) return;
     if (this.mode === 'worklet') this.node.port.postMessage(m);
     else this.core.apply(m);
+  },
+  // Start again at the chosen sample rate (call from a tap). Playback carries on if it was playing.
+  async restartAudio() {
+    if (!this.ctx) { renderRate(); return; }
+    try { this.ctx.onstatechange = null; await this.ctx.close(); } catch (e) {}
+    this.ctx = null; this.node = null; this.core = null; this.ready = null;
+    await this.init();
+    try { await this.ctx.resume(); } catch (e) {}
+    if (state.playing) this.send({ type: 'play', on: true });
+    renderRate();
   },
   // Make sure sound is actually flowing (call from a tap). If resuming doesn't work, which happens on
   // iPhones after the audio output changes, start a fresh audio connection on the current output.
@@ -1353,6 +1400,9 @@ const SPACE_KNOBS = [
   { id: 'delay', label: 'Echo', def: 0.25 },
   { id: 'rsize', label: 'Room size', def: 0.5 },
   { id: 'reverb', label: 'Reverb', def: 0.3 }
+];
+const OUT_KNOBS = [
+  { id: 'outlvl', label: 'Level', def: 1, fmt: v => v >= 0.999 ? '0 dB' : ((v - 1) * 30).toFixed(1) + ' dB' }
 ];
 const FILTER_TYPES = ['Ladder', 'Diode (303)'];
 const FILTER_KNOBS = [
@@ -1456,7 +1506,7 @@ const GROOVE_KNOBS = [
   { id: 'duck', label: 'Duck', def: 0.45 },
   { id: 'ducktime', label: 'Duck time', def: 0.4, fmt: v => Math.round((0.04 + v * 0.36) * 1000) + ' ms' }
 ];
-KNOBS.concat(OSC_KNOBS, DIST_KNOBS, RING_KNOBS, SPACE_KNOBS, FILTER_KNOBS, COMP_KNOBS, GROOVE_KNOBS, DRUM_MIX_KNOBS, DRUM_EDIT.flatMap(d => d.knobs)).forEach(k => state.params[k.id] = k.def);
+KNOBS.concat(OSC_KNOBS, DIST_KNOBS, RING_KNOBS, SPACE_KNOBS, FILTER_KNOBS, OUT_KNOBS, COMP_KNOBS, GROOVE_KNOBS, DRUM_MIX_KNOBS, DRUM_EDIT.flatMap(d => d.knobs)).forEach(k => state.params[k.id] = k.def);
 state.params.dtype = -1;   // None
 state.params.rmode = -1;   // None
 state.params.space = 1;
@@ -1739,6 +1789,53 @@ function renderFilter() { filterBtns.forEach((b, i) => b.setAttribute('aria-pres
 renderFilter();
 const filterKnobsEl = document.getElementById('filterKnobs');
 FILTER_KNOBS.forEach(k => filterKnobsEl.appendChild(buildKnob(k)));
+
+// Output: level, meter with a clip light, and the sample rate
+const outKnobsEl = document.getElementById('outKnobs');
+OUT_KNOBS.forEach(k => outKnobsEl.appendChild(buildKnob(k)));
+const mL = document.getElementById('mL'), mR = document.getElementById('mR');
+const clipLed = document.getElementById('clipLed'), peakRead = document.getElementById('peakRead');
+const toDb = x => x > 1e-6 ? 20 * Math.log10(x) : -Infinity;
+const meterW = x => Math.max(0, Math.min(100, (toDb(x) + 48) / 48 * 100));   // bar shows -48 dB to full scale
+let peakHold = 0, peakHoldAt = 0, clipUntil = 0, meterRaf = 0, meterL = 0, meterR = 0;
+function meterFeed(l, r) {
+  meterL = Math.max(meterL, l); meterR = Math.max(meterR, r);
+  if (!meterRaf) meterRaf = requestAnimationFrame(drawMeter);
+}
+function drawMeter() {
+  meterRaf = 0;
+  const now = performance.now(), l = meterL, r = meterR, pk = Math.max(l, r);
+  meterL = meterR = 0;
+  mL.style.width = meterW(l) + '%'; mR.style.width = meterW(r) + '%';
+  // within 0.2 dB of full scale counts as clipping: anything after AcidBox (a sampler input) would clip
+  const hot = pk >= 0.977;
+  mL.classList.toggle('hot', l >= 0.977); mR.classList.toggle('hot', r >= 0.977);
+  if (hot) clipUntil = now + 1500;
+  clipLed.classList.toggle('on', now < clipUntil);
+  if (pk >= peakHold || now - peakHoldAt > 2000) { peakHold = pk; peakHoldAt = now; }
+  peakRead.textContent = peakHold > 1e-5 ? `Peak: ${toDb(peakHold).toFixed(1)} dB` + (peakHold >= 0.977 ? ' (too hot for sampling: turn Level down)' : '') : 'Peak: silent';
+}
+const rateModesEl = document.getElementById('rateModes'), rateRead = document.getElementById('rateRead');
+const RATES = [['Auto', 0], ['44.1 kHz', 44100], ['48 kHz', 48000]];
+const rateBtns = RATES.map(([label, val]) => {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.addEventListener('click', () => {
+    try { if (val) localStorage.setItem('acidbox.rate', String(val)); else localStorage.removeItem('acidbox.rate'); } catch (e) {}
+    renderRate();
+    engine.restartAudio();
+  });
+  rateModesEl.appendChild(b);
+  return b;
+});
+function renderRate() {
+  const want = chosenRate();
+  rateBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(RATES[i][1] === want)));
+  const actual = engine.ctx ? engine.ctx.sampleRate : 0;
+  rateRead.textContent = !actual ? 'Starts when you press Play.'
+    : `Running at ${actual === 44100 ? '44.1' : (actual / 1000).toString()} kHz` + (want && actual !== want ? ' (this browser couldn’t switch rate)' : '') + '.';
+}
+renderRate();
 
 // ===================== Pattern banks =====================
 const banksEl = document.getElementById('banks');
@@ -2273,6 +2370,7 @@ DIST_KNOBS.forEach(k => { PARAM_NAMES[k.id] = 'Distortion ' + k.label.toLowerCas
 PARAM_NAMES.blevel = 'Bass volume';   // the knob just says Vol; MIDI lists say what it is
 SPACE_KNOBS.forEach(k => { PARAM_NAMES[k.id] = k.label; });
 FILTER_KNOBS.forEach(k => { PARAM_NAMES[k.id] = 'Filter ' + k.label.toLowerCase(); });
+PARAM_NAMES.outlvl = 'Output level';
 RING_KNOBS.forEach(k => { PARAM_NAMES[k.id] = 'Ring mod ' + k.label.toLowerCase(); });
 COMP_KNOBS.forEach(k => { PARAM_NAMES[k.id] = 'Compressor ' + k.label.toLowerCase(); });
 DRUM_MIX_KNOBS.forEach(k => { PARAM_NAMES[k.id] = k.label + ' level'; });
@@ -3019,7 +3117,7 @@ function loadPreset(i) {
   const pr = presets[i];
   if (!pr) return;
   const full = pr.kind === 'full';
-  state.params = Object.assign({}, DEFAULT_PARAMS, pr.params, { tempo: full && pr.tempo ? pr.tempo : state.params.tempo });
+  state.params = Object.assign({}, DEFAULT_PARAMS, pr.params, { tempo: full && pr.tempo ? pr.tempo : state.params.tempo, outlvl: state.params.outlvl });
   if (full) {
     if (Array.isArray(pr.banks) && pr.banks.length === 4) state.banks = clone(pr.banks);
     if (Array.isArray(pr.drumBanks) && pr.drumBanks.length === 4) state.drumBanks = clone(pr.drumBanks);
@@ -3101,7 +3199,7 @@ const fileInput = document.getElementById('fileInput');
 function shareSay(t) { shareMsg.textContent = t; }
 const fileSafe = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
 
-function soundOnly(params) { const { tempo, ...sound } = params; return clone(sound); }
+function soundOnly(params) { const { tempo, outlvl, ...sound } = params; return clone(sound); }   // output level belongs to your setup, not the sound
 function makeFile(kind, name, src) {
   const f = { acidbox: ACIDBOX_FILE, kind, name };
   if (kind === 'sound') f.params = soundOnly(src.params);
@@ -3207,7 +3305,7 @@ async function openFile(f) {
   const newer = d.acidbox > ACIDBOX_FILE ? ' It was made with a newer AcidBox, so some settings may be missing.' : '';
 
   if (d.kind === 'sound') {
-    state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo: state.params.tempo });
+    state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo: state.params.tempo, outlvl: state.params.outlvl });
     refreshAfterLoad();
     addSharedPreset({ name, kind: 'sound', saved: Date.now(), params: soundOnly(state.params) });
     shareSay(`Loaded the sound “${name}” and added it to your presets. Tap Undo to go back.` + newer);
@@ -3222,7 +3320,7 @@ async function openFile(f) {
     const banks = Array.isArray(d.banks) ? [0, 1, 2, 3].map(i => cleanBass(d.banks[i]) || emptyPattern()) : null;
     const drumBanks = Array.isArray(d.drumBanks) ? [0, 1, 2, 3].map(i => cleanDrums(d.drumBanks[i]) || emptyDrums()) : null;
     const tempo = typeof d.tempo === 'number' && isFinite(d.tempo) ? Math.max(60, Math.min(200, Math.round(d.tempo))) : state.params.tempo;
-    state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo });
+    state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo, outlvl: state.params.outlvl });
     if (banks) state.banks = banks;
     if (drumBanks) state.drumBanks = drumBanks;
     if (Array.isArray(d.song) && d.song.length) state.song = normSong(d.song);
