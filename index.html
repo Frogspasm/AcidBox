@@ -233,6 +233,8 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .clip.on { background: var(--led); color: var(--on-led); }
 .peak-read { font-size: 13px; color: var(--ink-soft); margin: -4px 0 4px; font-variant-numeric: tabular-nums; }
 .osc.modsec { display: block; }   /* its own layout: full width, not the label-and-knobs grid */
+/* Waves and Output sit among sections spaced from above, so they use that spacing too */
+.osc.modsec, .osc.out { margin: 14px 0 0; }
 .modsec .osc-label { min-width: 0; }
 .modsec .seg { flex-wrap: wrap; border-radius: 22px; max-width: 100%; }
 .modsec .seg button { height: 38px; min-width: 0; padding: 0 12px; white-space: nowrap; }
