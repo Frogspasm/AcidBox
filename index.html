@@ -185,7 +185,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .osc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .osc-label { min-width: 7.5em; font-size: 14px; font-weight: 600; }
 /* section names in capitals: Bass, Distortion, Ring mod, Space, Filter */
-.knobs-title, .dist .osc-label { text-transform: uppercase; letter-spacing: 0.05em; }
+.knobs-title, .dist .osc-label, .modsec .osc-label { text-transform: uppercase; letter-spacing: 0.05em; }
 .knobs-title { grid-column: 1 / -1; margin: 0 0 -4px 4px; }
 .waves button { width: 46px; padding: 0; display: grid; place-items: center; }
 .waves svg { width: 28px; height: 16px; display: block; }
@@ -222,6 +222,39 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
   background: var(--cell); color: var(--ink-soft); }
 .clip.on { background: var(--led); color: var(--on-led); }
 .peak-read { font-size: 13px; color: var(--ink-soft); margin: -4px 0 4px; font-variant-numeric: tabular-nums; }
+.osc.modsec { display: block; }   /* its own layout: full width, not the label-and-knobs grid */
+.modsec .osc-label { min-width: 0; }
+.modsec .seg { flex-wrap: wrap; border-radius: 22px; max-width: 100%; }
+.modsec .seg button { height: 38px; min-width: 0; padding: 0 12px; white-space: nowrap; }
+.modsec .ghost { height: 40px; padding: 0 14px; white-space: nowrap; }
+.wave-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.wave-head .seg button { min-width: 44px; }
+.wave-add { height: 40px; margin-left: auto; }
+.wave-help { margin: 8px 2px 0; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
+.wave-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
+.wave-row > .lbl { min-width: 5.5em; font-size: 13px; font-weight: 600; }
+.wave-row > .seg { flex: 0 1 auto; }
+.wave-graph { display: block; width: 100%; height: auto; min-height: 120px; margin-top: 12px; border-radius: 14px; background: var(--cell); touch-action: none; cursor: crosshair; }
+.wave-graph .curve { fill: none; stroke: var(--led); stroke-width: 3; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.wave-graph .mid { vector-effect: non-scaling-stroke; }
+.wave-graph .start { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 5; opacity: .7; vector-effect: non-scaling-stroke; }
+.wave-graph .pts rect { fill: var(--ink); opacity: .12; }
+.wave-graph .mid { stroke: var(--track); stroke-width: 1; stroke-dasharray: 4 4; }
+.wave-graph .dot { fill: var(--ink); stroke: var(--cell); stroke-width: 2; }
+.wave-tip { font-size: 12px; color: var(--ink-soft); margin: 6px 2px 0; }
+.mstep { flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px; }
+.mrange { flex: 1; min-width: 80px; accent-color: var(--led); }
+.modsec .mstep .ghost { flex: none; width: 34px; height: 34px; padding: 0; font-size: 18px; line-height: 1; touch-action: manipulation; }
+.mread.wide { min-width: 8.5em; }
+.mread { min-width: 4.5em; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; text-align: right; }
+.dest { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto auto; align-items: center; gap: 8px; margin-top: 8px; }
+.msel { min-width: 0; height: 38px; border-radius: 10px; border: 1.5px solid var(--track); background: var(--cell); color: var(--ink); font: inherit; font-size: 13px; padding: 0 8px; }
+.modsec .dest .ghost { height: 38px; width: 38px; padding: 0; }
+.dest-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.dest-tools .ghost { height: 40px; }
+.knob.pick { outline: 2px dashed var(--led); outline-offset: 2px; cursor: copy; }
+.moddot { pointer-events: none; }
+@media (max-width: 520px) { .dest { grid-template-columns: 1fr auto auto; } .dest .mstep { grid-column: 1 / -1; grid-row: 2; } }
 .share-help { margin: 2px 4px 10px; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
 .share-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
 .share-grid .export-btn { width: 100%; }
@@ -544,6 +577,16 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
     </div>
     <div class="osc-knobs" id="outKnobs"></div>
   </section>
+
+  <section class="osc modsec" aria-label="Waves">
+    <div class="wave-head">
+      <span class="osc-label">Waves</span>
+      <div class="pill seg" role="group" aria-label="Choose a wave" id="waveTabs"></div>
+      <button class="ghost wave-add" id="waveAdd">+ Wave</button>
+    </div>
+    <p class="wave-help" id="waveHelp">Waves move knobs for you: a slow sweep of the cutoff, a wobble on the resonance. Add one, pick or draw its shape, then send it to any knobs.</p>
+    <div id="waveBody"></div>
+  </section>
   </div>
 
   <div class="col col-pattern">
@@ -761,7 +804,11 @@ class AcidCore {
     this.cGr = 0;   // compressor gain reduction (dB)
     this.spaceWasOn = true;
     this.dy = new Float64Array(4); this.duPrev = 0;   // diode ladder node voltages and previous input
-    this.dVel = new Float64Array(5).fill(1);   // per-drum hit loudness: 1 for grid hits, MIDI velocity / 127 for played hits
+    this.dVel = new Float64Array(5).fill(1);
+    // waves (modulation): the knob values you set live in base; p holds them with the waves applied
+    this.base = Object.assign({}, this.p);
+    this.mods = []; this.modTargets = []; this.beatPos = 0; this.noteTrig = 0;
+    this.modState = [0, 1, 2, 3].map(() => ({ ph: 0, ps: 0, rnd: 0.5, note: -1, w: 0, on: false }));   // per-drum hit loudness: 1 for grid hits, MIDI velocity / 127 for played hits
     this.rvSleep = false; this.rvQuiet = 0; this.dlSleep = false; this.dlQuiet = 0;
     this.chInc = new Float64Array(6); this.ohInc = new Float64Array(6);
     this.playing = false;
@@ -780,7 +827,8 @@ class AcidCore {
   }
   apply(m) {
     switch (m.type) {
-      case 'params': Object.assign(this.p, m.params); break;
+      case 'params': Object.assign(this.p, m.params); Object.assign(this.base, m.params); break;
+      case 'mods': this.setMods(m.mods); break;
       case 'bank': this.banks[m.index] = m.pattern; this.dbanks[m.index] = m.drums; break;
       case 'loopBank':
         this.loopBank = m.index; this.loopDrum = m.drums === undefined ? m.index : m.drums;
@@ -809,7 +857,7 @@ class AcidCore {
     this.live.push(note);
     this.target = this.liveHz(note);
     this.accLevel = vel >= 100 ? 1 : 0;
-    if (!legato) { this.freq = this.target; this.fenv = 1; this.accEnv = 1; }
+    if (!legato) { this.freq = this.target; this.fenv = 1; this.accEnv = 1; this.noteTrig++; }
     else if (vel >= 100) this.accEnv = 1;
     this.prevSlide = false;
   }
@@ -822,7 +870,7 @@ class AcidCore {
     return 440 * Math.pow(2, (midi - 69) / 12);
   }
   setPlaying(on) {
-    if (on && !this.playing) { this.step = 0; this.toNext = 0; this.prevSlide = false; this.pos = -1; }
+    if (on && !this.playing) { this.step = 0; this.toNext = 0; this.prevSlide = false; this.pos = -1; this.beatPos = 0; }
     if (!on) { this.gateLeft = 0; this.prevSlide = false; if (this.onStep) this.onStep(-1); }
     this.playing = on;
   }
@@ -847,7 +895,7 @@ class AcidCore {
     } else if (s && !s.r) {
       this.target = this.hz(s.n, s.o);
       this.accLevel = s.a ? 1 : 0;
-      if (!tied) { this.freq = this.target; this.fenv = 1; this.accEnv = 1; }
+      if (!tied) { this.freq = this.target; this.fenv = 1; this.accEnv = 1; this.noteTrig++; }
       else if (s.a) { this.accEnv = 1; }
       this.gateLeft = s.s ? sps * 1.05 : sps * 0.5;
       this.prevSlide = s.s;
@@ -858,6 +906,76 @@ class AcidCore {
     this.step = (this.step + 1) % 16;
   }
   process(L, R, n) {
+    if (!this.modTargets.length) { this.beatPos += n * this.p.tempo / 60 / this.sr; this.render(L, R, 0, n); return; }
+    for (let off = 0; off < n; off += 32) {
+      const len = Math.min(32, n - off);
+      this.modulate(len);
+      this.render(L, R, off, off + len);
+    }
+  }
+  setMods(list) {
+    for (const id of this.modTargets) this.p[id] = this.base[id];   // undo the old modulation
+    this.mods = Array.isArray(list) ? list.slice(0, 4) : [];
+    const ids = new Set();
+    this.mods.forEach(m => { if (m && m.on !== false && Array.isArray(m.targets)) m.targets.forEach(t => { if (typeof this.base[t.id] === 'number') ids.add(t.id); }); });
+    this.modTargets = [...ids];
+  }
+  static get DIVS() { return [0.25, 0.5, 1, 2, 4, 8, 16, 32]; }   // beats: 1/16 note … 8 bars
+  // a wave's height (0..1) at a point in its cycle (0..1); also used by the page to draw it
+  static waveAt(m, ph, rnd) {
+    switch (m.shape) {
+      case 'sine': return 0.5 + 0.5 * Math.sin(2 * Math.PI * ph);
+      case 'tri': return ph < 0.5 ? ph * 2 : 2 - ph * 2;
+      case 'sawup': return ph;
+      case 'sawdown': return 1 - ph;
+      case 'square': return ph < 0.5 ? 1 : 0;
+      case 'random': return rnd;
+      case 'custom': {
+        const pts = m.pts, N = pts.length, x = ph * N, i = Math.floor(x) % N, f = x - Math.floor(x);
+        const p0 = pts[(i + N - 1) % N], p1 = pts[i], p2 = pts[(i + 1) % N], p3 = pts[(i + 2) % N];
+        // a curve flowing through every point (Catmull-Rom), so smoothed shapes have no ripples
+        let curve = 0.5 * (2 * p1 + (p2 - p0) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (3 * p1 - p0 - 3 * p2 + p3) * f * f * f);
+        curve = curve < 0 ? 0 : curve > 1 ? 1 : curve;
+        return p1 + (curve - p1) * (m.smooth || 0);
+      }
+    }
+    return 0.5;
+  }
+  modulate(len) {
+    const p = this.p, base = this.base, sr = this.sr;
+    const dBeats = len * p.tempo / 60 / sr, prevBeat = this.beatPos;
+    this.beatPos += dBeats;
+    for (const id of this.modTargets) p[id] = base[id];
+    for (let k = 0; k < this.mods.length; k++) {
+      const m = this.mods[k], st = this.modState[k];
+      st.on = !!(m && m.on !== false);
+      if (!st.on) { st.w = 0; continue; }
+      let ph = st.ph;
+      const restart = m.retrig === 'note' && st.note !== this.noteTrig;
+      if (restart) { st.note = this.noteTrig; ph = 0; }
+      if (m.sync) {
+        const per = AcidCore.DIVS[m.div | 0] || 4;
+        if (m.retrig === 'bar') ph = ((this.beatPos % 4) / per) % 1;
+        else if (m.retrig === 'note') ph += dBeats / per;
+        else ph = (this.beatPos / per) % 1;
+      } else {
+        if (m.retrig === 'bar' && Math.floor(this.beatPos / 4) !== Math.floor(prevBeat / 4)) ph = 0;
+        ph += 0.05 * Math.pow(400, m.hz === undefined ? 0.5 : m.hz) * len / sr;   // 0.05 to 20 Hz
+      }
+      ph -= Math.floor(ph);
+      st.ph = ph;
+      // offset: where in its cycle the wave starts (0..1 of a cycle)
+      let ps = ph + (m.off || 0); ps -= Math.floor(ps);
+      if (ps < st.ps || restart) st.rnd = Math.random();   // a new cycle: Random picks a new value
+      st.ps = ps;
+      const w = 2 * AcidCore.waveAt(m, ps, st.rnd) - 1;   // -1..1, centred on the knob
+      st.w = w;
+      if (Array.isArray(m.targets)) for (const t of m.targets) if (t.id in base) p[t.id] += (t.amt || 0) * w;
+    }
+    for (const id of this.modTargets) p[id] = p[id] < 0 ? 0 : p[id] > 1 ? 1 : p[id];
+  }
+  modReport() { return this.modState.map(st => [st.on ? st.w : 0, st.ps]); }
+  render(L, R, off, end) {
     const p = this.p, sr = this.sr;
     const sps = sr * 60 / p.tempo / 4;
     const decayT = 0.06 + p.decay * p.decay * 2.0;
@@ -940,7 +1058,7 @@ class AcidCore {
     const diode = (p.ftype | 0) === 1;
     const rv = this.rv;
 
-    for (let i = 0; i < n; i++) {
+    for (let i = off; i < end; i++) {
       if (this.playing) {
         this.toNext -= 1;
         if (this.toNext <= 0) { this.trigger(sps); this.toNext += sps; }
@@ -1239,7 +1357,7 @@ class AcidProc extends AudioWorkletProcessor {
     let pl = this.pl || 0, pr = this.pr || 0;
     for (let i = 0; i < l.length; i++) { const a = l[i] < 0 ? -l[i] : l[i], b = r[i] < 0 ? -r[i] : r[i]; if (a > pl) pl = a; if (b > pr) pr = b; }
     this.pl = pl; this.pr = pr; this.mn = (this.mn || 0) + l.length;
-    if (this.mn >= sampleRate / 20) { this.port.postMessage({ m: [pl, pr] }); this.pl = this.pr = 0; this.mn = 0; }
+    if (this.mn >= sampleRate / 20) { this.port.postMessage({ m: [pl, pr], mv: this.core.modReport() }); this.pl = this.pr = 0; this.mn = 0; }
     return true;
   }
 }
@@ -1312,7 +1430,7 @@ const engine = {
         }
         if (!loaded) throw lastErr || new Error('worklet failed');
         this.node = new AudioWorkletNode(this.ctx, 'acid-proc', { numberOfInputs: 0, outputChannelCount: [2] });
-        this.node.port.onmessage = (e) => (typeof e.data === 'number' ? showPlaying(e.data) : e.data && e.data.m ? meterFeed(e.data.m[0], e.data.m[1]) : showBar(e.data));
+        this.node.port.onmessage = (e) => (typeof e.data === 'number' ? showPlaying(e.data) : e.data && e.data.m ? (meterFeed(e.data.m[0], e.data.m[1]), modFeed(e.data.mv)) : showBar(e.data));
         this.mode = 'worklet';
       } catch (err) {
         // remember why, for the diagnostics panel
@@ -1331,6 +1449,7 @@ const engine = {
           let pl = 0, pr = 0;
           for (let i = 0; i < l.length; i++) { const x = Math.abs(l[i]), y = Math.abs(r[i]); if (x > pl) pl = x; if (y > pr) pr = y; }
           meterFeed(pl, pr);
+          if ((this.mvTick = (this.mvTick || 0) + 1) % 2 === 0) modFeed(this.core.modReport());
           const s = this.stats, work = performance.now() - t0;
           if (s.last && t0 - s.last > budget * 2) s.late++;   // the page was too busy to call us in time
           s.last = t0; s.calls++; s.total += work; if (work > s.worst) s.worst = work;
@@ -1342,6 +1461,7 @@ const engine = {
       for (let i = 0; i < 4; i++) sendBank(i);
       sendLoop();
       sendSong();
+      sendMods();
       renderRate();
     })();
     return this.ready;
@@ -1502,7 +1622,6 @@ const DRUM_MIX_KNOBS = [
 ];
 const GROOVE_KNOBS = [
   { id: 'dlevel', label: 'Drum volume', def: 0.7 },
-  { id: 'kdecay', label: 'Kick decay', def: 0.5 },
   { id: 'duck', label: 'Duck', def: 0.45 },
   { id: 'ducktime', label: 'Duck time', def: 0.4, fmt: v => Math.round((0.04 + v * 0.36) * 1000) + ' ms' }
 ];
@@ -1511,6 +1630,7 @@ state.params.dtype = -1;   // None
 state.params.rmode = -1;   // None
 state.params.space = 1;
 state.params.ftype = 0;    // Ladder
+state.mods = [];           // waves
 state.params.cmp = 0;
 const DEFAULT_PARAMS = Object.assign({ wave: 0, wave2: 0, interval: 0 }, state.params);
 
@@ -1528,6 +1648,7 @@ try {
     if (!state.midi.learned || typeof state.midi.learned !== 'object') state.midi.learned = {};
     if (typeof saved.skin === 'string') state.skin = saved.skin;
     if (saved.customSkin && typeof saved.customSkin.bg === 'string') state.customSkin = saved.customSkin;
+    if (Array.isArray(saved.mods)) state.mods = saved.mods;   // checked by cleanMods once the knob lists exist
   }
 } catch (e) { /* storage unavailable: use defaults */ }
 
@@ -1535,7 +1656,7 @@ let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ params: state.params, banks: state.banks, drumBanks: state.drumBanks, bank: state.bank, dbank: state.dbank, song: state.song, songOn: state.songOn, midi: state.midi, skin: state.skin, customSkin: state.customSkin || null })); } catch (e) {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ params: state.params, banks: state.banks, drumBanks: state.drumBanks, bank: state.bank, dbank: state.dbank, song: state.song, songOn: state.songOn, midi: state.midi, skin: state.skin, customSkin: state.customSkin || null, mods: state.mods })); } catch (e) {}
   }, 300);
   noteChange();
 }
@@ -1546,7 +1667,7 @@ function save() {
 var undoStack = [], redoStack = [], committed = null, commitTimer = null;
 function snapshot() {
   const { tempo, ...p } = state.params;
-  return JSON.stringify({ p, b: state.banks, d: state.drumBanks, s: state.song });
+  return JSON.stringify({ p, b: state.banks, d: state.drumBanks, s: state.song, m: state.mods });
 }
 function noteChange() {
   if (committed === null) return;
@@ -1601,6 +1722,7 @@ function buildKnob(k) {
       <path class="val" fill="none" stroke="var(--led)" stroke-width="4" stroke-linecap="round"/>
       <circle cx="32" cy="32" r="21" fill="var(--knob-body)"/>
       <line class="ind" x1="32" y1="32" stroke="var(--knob-mark)" stroke-width="3.5" stroke-linecap="round"/>
+      <circle class="moddot" r="3.6" fill="var(--ink)" stroke="var(--panel)" stroke-width="1.5" style="display:none"/>
     </svg><span class="klabel">${k.label}</span><span class="kval"></span>`;
   const valPath = el.querySelector('.val'), ind = el.querySelector('.ind'), out = el.querySelector('.kval');
   const fmt = k.fmt || (v => Math.round(v * 100));
@@ -1619,6 +1741,7 @@ function buildKnob(k) {
   let startY = 0, startV = 0, dragging = false;
   el.addEventListener('pointerdown', e => {
     if (learnMode) { e.preventDefault(); learnPick(k.id); return; }   // MIDI Learn: choose this knob
+    if (wavePick) { e.preventDefault(); wavePick(k.id); return; }      // Waves: send the wave to this knob
     dragging = true; startY = e.clientY; startV = state.params[k.id];
     el.setPointerCapture(e.pointerId); e.preventDefault();
   });
@@ -2251,6 +2374,7 @@ async function renderSong(onProgress) {
   const sr = 44100;
   const core = new AcidCore(sr);
   core.apply({ type: 'params', params: { ...state.params } });
+  core.apply({ type: 'mods', mods: JSON.parse(JSON.stringify(state.mods || [])) });   // waves render into the file too
   for (let i = 0; i < 4; i++) {
     core.apply({ type: 'bank', index: i, pattern: JSON.parse(JSON.stringify(state.banks[i])), drums: state.drumBanks[i].slice() });
   }
@@ -3026,6 +3150,8 @@ function restoreSnapshot(json) {
   }
   state.params = Object.assign({}, snap.p, { tempo: state.params.tempo });
   state.banks = snap.b; state.drumBanks = snap.d; state.song = normSong(snap.s);
+  state.mods = Array.isArray(snap.m) ? snap.m : [];
+  sendMods(); renderWaves();
   committed = json;
   engine.send({ type: 'params', params: { ...state.params } });
   for (let i = 0; i < 4; i++) sendBank(i);
@@ -3101,7 +3227,7 @@ function savePreset() {
     return;
   }
   const { tempo, ...sound } = state.params;
-  const p = { name, kind: presetKind, saved: Date.now(), params: clone(sound) };
+  const p = { name, kind: presetKind, saved: Date.now(), params: clone(sound), mods: clone(state.mods) };
   if (presetKind === 'full') Object.assign(p, { tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
   const before = presets.slice();
   if (idx >= 0) presets.splice(idx, 1);
@@ -3123,6 +3249,8 @@ function loadPreset(i) {
     if (Array.isArray(pr.drumBanks) && pr.drumBanks.length === 4) state.drumBanks = clone(pr.drumBanks);
     if (Array.isArray(pr.song) && pr.song.length) state.song = normSong(pr.song);
   }
+  state.mods = cleanMods(pr.mods);
+  sendMods(); renderWaves();
   engine.send({ type: 'params', params: { ...state.params } });
   for (let b = 0; b < 4; b++) sendBank(b);
   sendSong();
@@ -3202,9 +3330,9 @@ const fileSafe = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '')
 function soundOnly(params) { const { tempo, outlvl, ...sound } = params; return clone(sound); }   // output level belongs to your setup, not the sound
 function makeFile(kind, name, src) {
   const f = { acidbox: ACIDBOX_FILE, kind, name };
-  if (kind === 'sound') f.params = soundOnly(src.params);
+  if (kind === 'sound') { f.params = soundOnly(src.params); f.mods = clone(src.mods || []); }
   else if (kind === 'pattern') { f.bass = clone(src.bass); f.drums = clone(src.drums); }
-  else if (kind === 'song') Object.assign(f, { tempo: src.tempo, params: soundOnly(src.params), banks: clone(src.banks), drumBanks: clone(src.drumBanks), song: clone(src.song), songOn: !!src.songOn });
+  else if (kind === 'song') Object.assign(f, { tempo: src.tempo, params: soundOnly(src.params), mods: clone(src.mods || []), banks: clone(src.banks), drumBanks: clone(src.drumBanks), song: clone(src.song), songOn: !!src.songOn });
   else if (kind === 'skin') f.colors = clone(src.colors);
   return f;
 }
@@ -3238,12 +3366,12 @@ async function shareFile(file) {
 
 document.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click', () => {
   const kind = b.dataset.share, typed = shareName.value.trim();
-  if (kind === 'sound') shareFile(makeFile('sound', typed || 'AcidBox sound', { params: state.params }));
+  if (kind === 'sound') shareFile(makeFile('sound', typed || 'AcidBox sound', { params: state.params, mods: state.mods }));
   else if (kind === 'pattern') {
     const label = LETTERS[state.bank] + (state.dbank !== state.bank ? ' / drums ' + LETTERS[state.dbank] : '');
     shareFile(makeFile('pattern', typed || 'AcidBox pattern ' + label, { bass: state.banks[state.bank], drums: state.drumBanks[state.dbank] }));
   } else if (kind === 'song') {
-    shareFile(makeFile('song', typed || 'AcidBox song', { tempo: state.params.tempo, params: state.params, banks: state.banks, drumBanks: state.drumBanks, song: state.song, songOn: state.songOn }));
+    shareFile(makeFile('song', typed || 'AcidBox song', { tempo: state.params.tempo, params: state.params, mods: state.mods, banks: state.banks, drumBanks: state.drumBanks, song: state.song, songOn: state.songOn }));
   } else if (kind === 'skin') {
     if (!state.customSkin) { shareSay('Make a custom skin first: pick its colours in the Skins section.'); return; }
     const { base, ...colors } = state.customSkin;
@@ -3254,8 +3382,8 @@ document.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click
 function sharePreset(i) {
   const pr = presets[i];
   if (!pr) return;
-  if (pr.kind === 'full') shareFile(makeFile('song', pr.name, { tempo: pr.tempo || state.params.tempo, params: pr.params, banks: pr.banks || state.banks, drumBanks: pr.drumBanks || state.drumBanks, song: pr.song || state.song, songOn: state.songOn }));
-  else shareFile(makeFile('sound', pr.name, { params: pr.params }));
+  if (pr.kind === 'full') shareFile(makeFile('song', pr.name, { tempo: pr.tempo || state.params.tempo, params: pr.params, mods: pr.mods, banks: pr.banks || state.banks, drumBanks: pr.drumBanks || state.drumBanks, song: pr.song || state.song, songOn: state.songOn }));
+  else shareFile(makeFile('sound', pr.name, { params: pr.params, mods: pr.mods }));
 }
 
 // ---------- opening: check everything, since a file can come from anyone
@@ -3280,6 +3408,7 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 function refreshAfterLoad() {
   engine.send({ type: 'params', params: { ...state.params } });
+  sendMods(); renderWaves();
   for (let b = 0; b < 4; b++) sendBank(b);
   sendSong();
   tempoVal.textContent = state.params.tempo;
@@ -3306,8 +3435,9 @@ async function openFile(f) {
 
   if (d.kind === 'sound') {
     state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo: state.params.tempo, outlvl: state.params.outlvl });
+    state.mods = cleanMods(d.mods);
     refreshAfterLoad();
-    addSharedPreset({ name, kind: 'sound', saved: Date.now(), params: soundOnly(state.params) });
+    addSharedPreset({ name, kind: 'sound', saved: Date.now(), params: soundOnly(state.params), mods: clone(state.mods) });
     shareSay(`Loaded the sound “${name}” and added it to your presets. Tap Undo to go back.` + newer);
   } else if (d.kind === 'pattern') {
     const bass = cleanBass(d.bass), drums = cleanDrums(d.drums);
@@ -3321,11 +3451,12 @@ async function openFile(f) {
     const drumBanks = Array.isArray(d.drumBanks) ? [0, 1, 2, 3].map(i => cleanDrums(d.drumBanks[i]) || emptyDrums()) : null;
     const tempo = typeof d.tempo === 'number' && isFinite(d.tempo) ? Math.max(60, Math.min(200, Math.round(d.tempo))) : state.params.tempo;
     state.params = Object.assign({}, DEFAULT_PARAMS, cleanParams(d.params), { tempo, outlvl: state.params.outlvl });
+    state.mods = cleanMods(d.mods);
     if (banks) state.banks = banks;
     if (drumBanks) state.drumBanks = drumBanks;
     if (Array.isArray(d.song) && d.song.length) state.song = normSong(d.song);
     refreshAfterLoad();
-    addSharedPreset({ name, kind: 'full', saved: Date.now(), params: soundOnly(state.params), tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
+    addSharedPreset({ name, kind: 'full', saved: Date.now(), params: soundOnly(state.params), mods: clone(state.mods), tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
     shareSay(`Loaded the song “${name}” and added it to your presets. Tap Undo to go back.` + newer);
   } else if (d.kind === 'skin') {
     const c = d.colors || {};
@@ -3412,6 +3543,316 @@ skinsFold.addEventListener('toggle', () => { try { localStorage.setItem('acidbox
   window.addEventListener('resize', () => { setDocked(false); queue(); });
   check();
 })();
+
+// ===================== Waves (modulation) =====================
+// Up to four waves. Each has a shape (picked, or drawn), a speed, a restart rule, and a list of knobs it
+// moves, each by its own amount. The sound engine runs them in time with the music; the page only edits.
+const SHAPES = [['sine', 'Sine'], ['tri', 'Triangle'], ['sawup', 'Saw up'], ['sawdown', 'Saw down'], ['square', 'Square'], ['random', 'Random'], ['custom', 'Custom']];
+const DIV_NAMES = ['1/16', '1/8', '1/4', '1/2', '1 bar', '2 bars', '4 bars', '8 bars'];
+const RETRIGS = [['free', 'Free'], ['bar', 'Each bar'], ['note', 'Each note']];
+const hzOf = v => 0.05 * Math.pow(400, v);
+const clamp01 = x => Math.max(0, Math.min(1, x));
+function modGroups() {   // every knob a wave can move, grouped like the page
+  const g = [['Bass', KNOBS], ['Oscillators', OSC_KNOBS], ['Distortion', DIST_KNOBS], ['Ring mod', RING_KNOBS], ['Space', SPACE_KNOBS],
+    ['Filter', FILTER_KNOBS], ['Drums', GROOVE_KNOBS.concat(DRUM_MIX_KNOBS)], ['Compressor', COMP_KNOBS]];
+  DRUM_EDIT.forEach(d => g.push([d.name, d.knobs]));
+  return g.map(([name, list]) => [name, list.filter(k => typeof state.params[k.id] === 'number' && k.id !== 'outlvl')]);
+}
+const MOD_IDS = new Set(modGroups().flatMap(([, l]) => l.map(k => k.id)));
+function newWave() {
+  return { on: true, shape: 'sine', pts: Array.from({ length: 32 }, (_, i) => 0.5 + 0.5 * Math.sin(2 * Math.PI * i / 32)), smooth: 1,
+    sync: true, div: 4, hz: 0.5, retrig: 'free', off: 0, targets: [] };
+}
+function cleanMods(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 4).filter(m => m && typeof m === 'object').map(m => ({
+    on: m.on !== false,
+    shape: SHAPES.some(s => s[0] === m.shape) ? m.shape : 'sine',
+    pts: Array.from({ length: 32 }, (_, i) => { const v = Array.isArray(m.pts) ? Number(m.pts[i]) : NaN; return isFinite(v) ? clamp01(v) : 0.5; }),
+    smooth: clamp01(Number(m.smooth) || 0),
+    sync: m.sync !== false,
+    div: m.div === undefined ? 4 : Math.max(0, Math.min(7, m.div | 0)),
+    hz: isFinite(Number(m.hz)) ? clamp01(Number(m.hz)) : 0.5,
+    retrig: RETRIGS.some(r => r[0] === m.retrig) ? m.retrig : 'free',
+    off: isFinite(Number(m.off)) ? Math.max(0, Math.min(0.999, Number(m.off))) : 0,
+    targets: (Array.isArray(m.targets) ? m.targets : []).filter(t => t && MOD_IDS.has(t.id)).slice(0, 16)
+      .map(t => ({ id: t.id, amt: Math.max(-1, Math.min(1, Number(t.amt) || 0)) }))
+  }));
+}
+state.mods = cleanMods(state.mods);
+function sendMods() { engine.send({ type: 'mods', mods: clone(state.mods) }); }
+let waveSel = 0, waveDrag = null, sendQueued = false;
+function modsChanged(rebuild) {
+  if (!sendQueued) { sendQueued = true; requestAnimationFrame(() => { sendQueued = false; sendMods(); }); }
+  save();
+  if (rebuild) renderWaves(); else drawWaveGraph();
+}
+
+const waveTabs = document.getElementById('waveTabs'), waveBody = document.getElementById('waveBody');
+const waveAdd = document.getElementById('waveAdd'), waveHelp = document.getElementById('waveHelp');
+waveAdd.addEventListener('click', () => {
+  if (state.mods.length >= 4) return;
+  state.mods.push(newWave());
+  waveSel = state.mods.length - 1;
+  modsChanged(true);
+});
+
+function seg(options, current, onPick, label) {
+  const g = document.createElement('div');
+  g.className = 'pill seg'; g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
+  options.forEach(([val, text]) => {
+    const b = document.createElement('button');
+    b.textContent = text; b.setAttribute('aria-pressed', String(val === current));
+    b.addEventListener('click', () => onPick(val));
+    g.appendChild(b);
+  });
+  return g;
+}
+function row(label, ...kids) {
+  const r = document.createElement('div'); r.className = 'wave-row';
+  if (label) { const l = document.createElement('span'); l.className = 'lbl'; l.textContent = label; r.appendChild(l); }
+  kids.forEach(k => r.appendChild(k));
+  return r;
+}
+// a slider with − and + either side for fine tuning (tap to nudge one step, hold to keep going)
+function range(min, max, step, value, label, onInput, nudge = step) {
+  const wrap = document.createElement('div'); wrap.className = 'mstep';
+  const r = document.createElement('input');
+  r.type = 'range'; r.className = 'mrange'; r.min = min; r.max = max; r.step = step; r.value = value;
+  r.setAttribute('aria-label', label);
+  r.addEventListener('input', () => onInput(Number(r.value)));
+  const btn = (text, dir) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ghost'; b.textContent = text;
+    b.setAttribute('aria-label', (dir < 0 ? 'Decrease ' : 'Increase ') + label.split(':')[0].toLowerCase());
+    holdRepeat(b, () => {
+      const v = Math.max(min, Math.min(max, Number(r.value) + dir * nudge));
+      r.value = String(Math.round(v / step) * step);   // stay on the slider's own steps
+      onInput(Number(r.value));
+    });
+    return b;
+  };
+  wrap.append(btn('−', -1), r, btn('+', 1));
+  return wrap;
+}
+const pct = a => (a > 0 ? '+' : a < 0 ? '−' : '') + Math.abs(Math.round(a * 100)) + '%';
+
+function renderWaves() {
+  waveSel = Math.min(waveSel, Math.max(0, state.mods.length - 1));
+  waveTabs.innerHTML = '';
+  state.mods.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.textContent = String(i + 1) + (m.on ? '' : ' (off)');
+    b.setAttribute('aria-pressed', String(i === waveSel));
+    b.setAttribute('aria-label', `Wave ${i + 1}${m.on ? '' : ', switched off'}`);
+    b.addEventListener('click', () => { waveSel = i; renderWaves(); });
+    waveTabs.appendChild(b);
+  });
+  waveTabs.hidden = !state.mods.length;
+  waveAdd.disabled = state.mods.length >= 4;
+  waveHelp.hidden = state.mods.length > 0;
+  waveBody.innerHTML = '';
+  wavePickEnd();
+  const m = state.mods[waveSel];
+  if (!m) { refreshModDots(); return; }
+
+  // on / off and remove
+  const del = document.createElement('button');
+  del.className = 'ghost'; del.textContent = 'Remove wave';
+  del.addEventListener('click', () => { state.mods.splice(waveSel, 1); modsChanged(true); });
+  waveBody.appendChild(row('Wave ' + (waveSel + 1), seg([[true, 'On'], [false, 'Off']], m.on, v => { m.on = v; modsChanged(true); }, 'Wave on or off'), del));
+
+  // shape: pick one, or draw on the graph (which makes it Custom, starting from the shape you had)
+  waveBody.appendChild(row('Shape', seg(SHAPES, m.shape, v => {
+    if (v === 'custom' && m.shape !== 'custom') toCustom(m); else m.shape = v;
+    modsChanged(true);
+  }, 'Wave shape')));
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 640 200'); svg.setAttribute('class', 'wave-graph');
+  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Wave shape. Draw on it to make your own.');
+  svg.innerHTML = '<line class="mid" x1="0" y1="100" x2="640" y2="100"/><g class="pts"></g><path class="curve"/><line class="start" y1="0" y2="200"/><circle class="dot" r="8" cx="-20" cy="100"/>';
+  waveBody.appendChild(svg);
+  const tip = document.createElement('p'); tip.className = 'wave-tip';
+  tip.textContent = m.shape === 'custom' ? 'Draw on the graph to change it. Smooth turns steps into curves.' : 'Draw on the graph to reshape it (it becomes Custom).';
+  waveBody.appendChild(tip);
+  if (m.shape === 'custom') {
+    const read = document.createElement('span'); read.className = 'mread'; read.textContent = Math.round(m.smooth * 100) + '%';
+    waveBody.appendChild(row('Smooth', range(0, 1, 0.01, m.smooth, 'Smooth', v => { m.smooth = v; read.textContent = Math.round(v * 100) + '%'; modsChanged(); }), read));
+  }
+  attachDrawing(svg, m);
+
+  // speed: in time with the tempo, or free in Hz
+  waveBody.appendChild(row('Speed', seg([[true, 'Tempo'], [false, 'Hz']], m.sync, v => { m.sync = v; modsChanged(true); }, 'Speed in tempo or Hz')));
+  if (m.sync) waveBody.appendChild(row('', seg(DIV_NAMES.map((n, i) => [i, n]), m.div, v => { m.div = v; modsChanged(true); }, 'Length of one cycle')));
+  else {
+    const read = document.createElement('span'); read.className = 'mread';
+    const show = v => { const h = hzOf(v); read.textContent = (h < 1 ? h.toFixed(2) : h < 10 ? h.toFixed(1) : Math.round(h)) + ' Hz'; };
+    show(m.hz);
+    waveBody.appendChild(row('', range(0, 1, 0.001, m.hz, 'Speed in Hz', v => { m.hz = v; show(v); modsChanged(); }, 0.005), read));   // each tap about 3% faster or slower
+  }
+  waveBody.appendChild(row('Restart', seg(RETRIGS, m.retrig, v => { m.retrig = v; modsChanged(true); }, 'When the wave restarts')));
+  {
+    const read = document.createElement('span'); read.className = 'mread wide';
+    const show = v => {
+      let t;
+      if (m.sync) {
+        const steps = v * AcidCore.DIVS[m.div] * 4;   // in sixteenth notes
+        t = steps < 0.05 ? '' : ` · ${+steps.toFixed(2)} step${Math.abs(steps - 1) < 1e-6 ? '' : 's'}`;
+      } else {
+        const ms = v / hzOf(m.hz) * 1000;
+        t = ms < 0.5 ? '' : ` · ${ms < 100 ? ms.toFixed(1) : Math.round(ms)} ms`;
+      }
+      read.textContent = Math.round(v * 100) + '%' + t;
+    };
+    show(m.off || 0);
+    // in Tempo, offsets snap to 1/64 of a cycle so they land on musical divisions
+    waveBody.appendChild(row('Offset', range(0, 0.999, m.sync ? 1 / 64 : 0.005, m.off || 0, 'Offset: where in its cycle the wave starts', v => {
+      m.off = v; show(v); modsChanged();
+    }), read));
+  }
+
+  // destinations: which knobs, and how much (negative pushes the other way)
+  const head = row('Sends to'); waveBody.appendChild(head);
+  if (!m.targets.length) { const e = document.createElement('p'); e.className = 'wave-tip'; e.textContent = 'Not sent anywhere yet. Add a knob below.'; waveBody.appendChild(e); }
+  m.targets.forEach((t, ti) => {
+    const d = document.createElement('div'); d.className = 'dest';
+    const sel = document.createElement('select'); sel.className = 'msel'; sel.setAttribute('aria-label', 'Knob');
+    modGroups().forEach(([gname, list]) => {
+      const og = document.createElement('optgroup'); og.label = gname;
+      list.forEach(k => {
+        const o = document.createElement('option'); o.value = k.id; o.textContent = pname(k.id);
+        o.disabled = k.id !== t.id && m.targets.some(x => x.id === k.id);
+        if (k.id === t.id) o.selected = true;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+    sel.addEventListener('change', () => { t.id = sel.value; modsChanged(true); });
+    const read = document.createElement('span'); read.className = 'mread'; read.textContent = pct(t.amt);
+    const amt = range(-1, 1, 0.01, t.amt, 'Amount for ' + pname(t.id), v => { t.amt = v; read.textContent = pct(v); modsChanged(); });
+    const x = document.createElement('button'); x.className = 'ghost'; x.textContent = '×'; x.setAttribute('aria-label', 'Stop sending to ' + pname(t.id));
+    x.addEventListener('click', () => { m.targets.splice(ti, 1); modsChanged(true); });
+    d.append(sel, amt, read, x);
+    waveBody.appendChild(d);
+  });
+  const tools = document.createElement('div'); tools.className = 'dest-tools';
+  const addSel = document.createElement('button'); addSel.className = 'ghost'; addSel.textContent = '+ Add knob';
+  addSel.addEventListener('click', () => {
+    const used = new Set(m.targets.map(t => t.id));
+    const first = modGroups().flatMap(([, l]) => l).find(k => !used.has(k.id));
+    if (first) { m.targets.push({ id: first.id, amt: 0.3 }); modsChanged(true); }
+  });
+  const pick = document.createElement('button'); pick.className = 'ghost'; pick.textContent = 'Tap a knob to add';
+  pick.addEventListener('click', () => wavePickStart(m, pick));
+  tools.append(addSel, pick);
+  waveBody.appendChild(tools);
+  drawWaveGraph();
+  refreshModDots();
+}
+
+// make a picked shape editable: sample it into 32 points
+function toCustom(m) {
+  const smoothShape = ['sine', 'tri', 'sawup', 'sawdown'].includes(m.shape);
+  m.pts = Array.from({ length: 32 }, (_, i) => m.shape === 'random' ? Math.random() : AcidCore.waveAt(m, i / 32, 0.5));
+  m.smooth = smoothShape ? 1 : 0;
+  m.shape = 'custom';
+}
+function attachDrawing(svg, m) {
+  let last = -1, converted = false;
+  const at = e => {
+    const r = svg.getBoundingClientRect();
+    return [Math.max(0, Math.min(31, Math.floor((e.clientX - r.left) / r.width * 32))), clamp01(1 - (e.clientY - r.top) / r.height)];
+  };
+  const paint = e => {
+    const [i, v] = at(e);
+    if (last < 0) last = i;
+    const a = Math.min(last, i), b = Math.max(last, i);
+    for (let j = a; j <= b; j++) m.pts[j] = v;   // fill the gap when the finger moves fast
+    last = i;
+    modsChanged();
+  };
+  svg.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    waveDrag = true; last = -1;
+    if (m.shape !== 'custom') { toCustom(m); converted = true; }   // drawing on a picked shape makes it Custom, starting from that shape
+    paint(e);
+  });
+  svg.addEventListener('pointermove', e => { if (waveDrag && svg.hasPointerCapture(e.pointerId)) paint(e); });
+  const end = () => { waveDrag = null; last = -1; if (converted) { converted = false; renderWaves(); } };
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+}
+let modLive = null, modLiveAt = 0, modRaf = 0;
+function drawWaveGraph() {
+  const m = state.mods[waveSel], svg = waveBody.querySelector('.wave-graph');
+  if (!m || !svg) return;
+  const pts = svg.querySelector('.pts'), curve = svg.querySelector('.curve');
+  pts.innerHTML = m.shape === 'custom' ? m.pts.map((v, i) => `<rect x="${i * 20 + 2}" y="${(1 - v) * 200}" width="16" height="${v * 200}"/>`).join('') : '';
+  let d = '';
+  for (let x = 0; x <= 160; x++) {
+    const ph = Math.min(0.99999, x / 160), v = m.shape === 'random' ? (Math.floor(ph * 4) * 0.37 + 0.2) % 1 : AcidCore.waveAt(m, ph, 0.5);
+    d += (x ? 'L' : 'M') + (x * 4) + ' ' + ((1 - v) * 184 + 8).toFixed(1);
+  }
+  curve.setAttribute('d', d);
+  const start = svg.querySelector('.start'), x0 = ((m.off || 0) * 640).toFixed(1);
+  start.setAttribute('x1', x0); start.setAttribute('x2', x0);
+  start.style.display = (m.off || 0) > 0.001 ? '' : 'none';
+  drawWaveDot();
+}
+function drawWaveDot() {
+  const svg = waveBody.querySelector('.wave-graph'), m = state.mods[waveSel];
+  if (!svg || !m) return;
+  const dot = svg.querySelector('.dot'), live = modLive && performance.now() - modLiveAt < 400 ? modLive[waveSel] : null;
+  if (!live || !m.on) { dot.setAttribute('cx', -20); return; }
+  dot.setAttribute('cx', (live[1] * 640).toFixed(1));
+  dot.setAttribute('cy', ((1 - (live[0] + 1) / 2) * 184 + 8).toFixed(1));
+}
+// from the engine about 20 times a second: each wave's value and position
+function modFeed(mv) {
+  if (!mv) return;
+  modLive = mv; modLiveAt = performance.now();
+  if (!modRaf) modRaf = requestAnimationFrame(() => { modRaf = 0; drawWaveDot(); refreshModDots(); });
+}
+// dots on the knobs: where the waves are taking them right now
+function refreshModDots() {
+  const live = modLive && performance.now() - modLiveAt < 400 ? modLive : null;
+  const sum = {};
+  if (live) state.mods.forEach((m, k) => { if (m.on && live[k]) m.targets.forEach(t => { sum[t.id] = (sum[t.id] || 0) + t.amt * live[k][0]; }); });
+  document.querySelectorAll('.knob').forEach(el => {
+    const dot = el.querySelector('.moddot'), id = el.dataset.pid;
+    if (!dot) return;
+    if (!(id in sum)) { dot.style.display = 'none'; return; }
+    const v = clamp01(state.params[id] + sum[id]), a = A0 + v * SPAN;
+    dot.setAttribute('cx', (32 + 28 * Math.cos(a)).toFixed(2));
+    dot.setAttribute('cy', (32 + 28 * Math.sin(a)).toFixed(2));
+    dot.style.display = '';
+  });
+}
+setInterval(() => { if (modLive && performance.now() - modLiveAt > 400) { modLive = null; refreshModDots(); drawWaveDot(); } }, 500);
+
+// "Tap a knob to add": the next knob tapped joins this wave's destinations
+var wavePick = null;
+let wavePickBtn = null;
+function wavePickStart(m, btn) {
+  if (wavePick) { wavePickEnd(); return; }
+  wavePickBtn = btn;
+  btn.textContent = 'Tap a knob… (tap here to cancel)';
+  document.querySelectorAll('.knob').forEach(el => { if (MOD_IDS.has(el.dataset.pid)) el.classList.add('pick'); });
+  wavePick = id => {
+    if (MOD_IDS.has(id) && !m.targets.some(t => t.id === id)) m.targets.push({ id, amt: 0.3 });
+    wavePickEnd();
+    modsChanged(true);
+  };
+}
+function wavePickEnd() {
+  wavePick = null;
+  document.querySelectorAll('.knob.pick').forEach(el => el.classList.remove('pick'));
+  if (wavePickBtn) { wavePickBtn.textContent = 'Tap a knob to add'; wavePickBtn = null; }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && wavePick) wavePickEnd(); });
+renderWaves();
 </script>
 </body>
 </html>
