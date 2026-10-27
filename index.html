@@ -437,7 +437,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 
 .steps { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px 6px; }
 .cell {
-  position: relative; height: 96px; padding: 8px 0 7px;
+  position: relative; height: 70px; padding: 8px 0 7px;
   display: flex; flex-direction: column; align-items: center;
   border: 0; border-radius: 10px; background: var(--cell);
 }
@@ -469,7 +469,12 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .edrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 #tChord[aria-pressed="true"] { background: var(--led); border-color: var(--led); color: var(--on-led); }
 .chord-read { flex: 1 1 120px; min-width: 110px; max-width: 220px; font-size: 12px; color: var(--ink-soft); line-height: 1.3; }
-.arp { display: grid; gap: 10px; padding: 12px; border-radius: 16px; background: var(--cell); }
+.arp { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px; margin-top: 10px; padding: 10px 12px; border-radius: 16px; background: var(--cell); }
+.arp.idle .agrp { opacity: .55; }
+.arp-head { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.agrp { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.apair { display: flex; gap: 8px 14px; align-items: flex-end; }
+.albl { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); }
 .arp[hidden] { display: none; }
 .arp .wave-row { margin-top: 0; }
 .arp .seg { flex-wrap: wrap; border-radius: 22px; max-width: 100%; }
@@ -478,7 +483,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .arp .seg { min-width: 0; }   /* let long rows wrap inside the panel instead of running off the edge */
 @media (max-width: 440px) { .arp .seg button { padding: 0 8px; font-size: 13px; } .arp { padding: 10px 8px; } }
 .arp-title { font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.arp-note { font-size: 12px; color: var(--ink-soft); margin: 0; line-height: 1.4; }
+.arp-note { flex-basis: 100%; font-size: 12px; color: var(--ink-soft); margin: 0; line-height: 1.4; }
 .nn .chd { font-size: 10px; font-weight: 700; margin-left: 2px; color: var(--led); }
 .tog { height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 999px; background: transparent; font-weight: 600; }
 .tog[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
@@ -490,7 +495,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 @media (min-width: 760px), (orientation: landscape) and (min-width: 600px) {
   .knobs { grid-template-columns: repeat(10, 1fr); }
   .steps { grid-template-columns: repeat(16, 1fr); }
-  .cell { height: 120px; }
+  .cell { height: 84px; }
 }
 /* ---------- Landscape: use the whole screen ---------- */
 @media (orientation: landscape) {
@@ -507,7 +512,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
   .knobs { padding: 12px 8px 10px; gap: 8px 4px; }
   .knob svg { width: 52px; height: 52px; }
   .osc { padding: 12px 14px; }
-  .cell { height: 88px; }
+  .cell { height: 68px; }
   .piano { height: 100px; }
   .ggrid { grid-template-columns: 5.6em repeat(16, 1fr); gap: 4px; }
   .gcell { min-height: 22px; }
@@ -525,7 +530,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 }
 @media (max-width: 360px) {
   .knob svg { width: 54px; height: 54px; }
-  .cell { height: 84px; }
+  .cell { height: 64px; }
   .nn { font-size: 13px; }
 }
 </style>
@@ -628,8 +633,8 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
         <button class="tog" id="tChord" aria-pressed="false">Chord</button>
         <span class="chord-read" id="chordRead">Turn on, then tap keys for a chord</span>
       </div>
-      <div class="arp" id="arpPanel" hidden></div>
     </div>
+    <div class="arp" id="arpPanel" aria-label="Arpeggio settings for the selected step"></div>
     </div>
   </section>
 
@@ -842,7 +847,7 @@ class AcidCore {
     this.base = Object.assign({}, this.p);
     this.mods = []; this.modTargets = []; this.beatPos = 0; this.noteTrig = 0;
     // arpeggios: settings per pattern, which settings win, and the running arps
-    this.arpScope = 'pattern'; this.arpBanks = [0, 1, 2, 3].map(() => AcidCore.ARP_DEFAULT); this.arpCount = 0; this.rip = null; this.held = null;
+    this.arpScope = 'pattern'; this.arpBanks = [0, 1, 2, 3].map(() => AcidCore.ARP_DEFAULT); this.arpCount = 0; this.ripCount = 0; this.rip = null; this.held = null;
     this.modState = [0, 1, 2, 3].map(() => ({ ph: 0, ps: 0, rnd: 0.5, note: -1, w: 0, on: false }));   // per-drum hit loudness: 1 for grid hits, MIDI velocity / 127 for played hits
     this.rvSleep = false; this.rvQuiet = 0; this.dlSleep = false; this.dlQuiet = 0;
     this.chInc = new Float64Array(6); this.ohInc = new Float64Array(6);
@@ -908,7 +913,7 @@ class AcidCore {
   setPlaying(on) {
     if (on && !this.playing) { this.step = 0; this.toNext = 0; this.prevSlide = false; this.pos = -1; this.beatPos = 0; }
     if (!on) { this.gateLeft = 0; this.prevSlide = false; this.rip = null; this.held = null; if (this.onStep) this.onStep(-1); }
-    if (on && !this.playing) this.arpCount = 0;
+    if (on && !this.playing) { this.arpCount = 0; this.ripCount = 0; }
     this.playing = on;
   }
   playNote(n, o, acc, slide, gate, tied) {
@@ -919,13 +924,11 @@ class AcidCore {
     this.gateLeft = gate;
     this.prevSlide = slide;
   }
-  static get ARP_DEFAULT() { return { mode: 'ripple', dir: 'up', speed: 2, oct: 1 }; }
+  static get ARP_DEFAULT() { return { mode: 'ripple', dir: 'up', speed: 2, oct: 1, rate: 1 }; }
   // which arp settings a step uses: the pattern's, its own, or its own when it has them
   arpCfg(s) {
     const pat = this.arpBanks[this.ab] || AcidCore.ARP_DEFAULT;
-    if (this.arpScope === 'step') return Object.assign({}, AcidCore.ARP_DEFAULT, s.arp || {});
-    if (this.arpScope === 'both' && s.arp) return Object.assign({}, pat, s.arp);
-    return pat;
+    return s.arp ? Object.assign({}, pat, s.arp) : pat;   // the pattern's settings, unless the step has its own
   }
   // the chord's notes low to high, repeated an octave up when Octaves is 2
   static arpSeq(ns, o, oct) {
@@ -947,7 +950,8 @@ class AcidCore {
   }
   ripNext() {
     const r = this.rip, [n, o] = AcidCore.arpPick(r.seq, r.cfg.dir, r.i++, this);
-    this.playNote(n, o, r.a, r.sl, r.sl ? r.per * 1.05 : r.per * 0.5, r.sl && this.gateLeft > 0);
+    const g = r.left === 1 ? (r.tail || r.per) : r.per;   // the last note of the run holds for the rest of the step
+    this.playNote(n, o, r.a, r.sl, r.sl ? g * 1.05 : g * 0.5, r.sl && this.gateLeft > 0);
     if (--r.left <= 0) this.rip = null; else r.wait += r.per;
   }
   audition(n, o, a) {
@@ -990,10 +994,17 @@ class AcidCore {
         this.playNote(n, o, s.a, s.s, s.s ? sps * 1.05 : sps * 0.5, tied);
         this.held = { seq, cfg, i: 1, a: s.a, sl: s.s };
       } else {   // ripple: several notes inside the step
-        const per = sps / cfg.speed;
-        const [n, o] = AcidCore.arpPick(seq, cfg.dir, 0, this);
-        this.playNote(n, o, s.a, s.s, s.s ? per * 1.05 : per * 0.5, tied);
-        this.rip = { seq, cfg, i: 1, left: cfg.speed - 1, wait: per, per, a: s.a, sl: s.s };
+        // 2, 3 or 4 per step carry on through the chord from step to step; All plays the whole chord each step
+        const all = !cfg.speed, count = all ? seq.length : cfg.speed;
+        // Speed: 1x spreads the run across the step; faster packs it into the start, like a strum,
+        // and the last note holds for the rest of the step
+        const per = sps / count / (cfg.rate || 1), tail = sps - per * (count - 1);
+        const start = all ? 0 : this.ripCount;
+        this.ripCount = start + count;
+        const [n, o] = AcidCore.arpPick(seq, cfg.dir, start, this);
+        const g0 = count === 1 ? tail : per;
+        this.playNote(n, o, s.a, s.s, s.s ? g0 * 1.05 : g0 * 0.5, tied);
+        this.rip = { seq, cfg, i: start + 1, left: count - 1, wait: per, per, tail, a: s.a, sl: s.s };
       }
     } else if (this.held && s && s.r) {
       // Held steps: the rests after a chord keep stepping through it
@@ -2243,19 +2254,20 @@ function renderEditor() {
 const ARP_MODES = [['ripple', 'Ripple'], ['across', 'Across steps'], ['held', 'Held steps']];
 const ARP_DIRS = [['up', 'Up'], ['down', 'Down'], ['updown', 'Up/Down'], ['random', 'Random']];
 const ARP_SCOPES = [['pattern', 'Pattern'], ['step', 'Step'], ['both', 'Pattern + Override']];
-const ARP_DEF = () => ({ mode: 'ripple', dir: 'up', speed: 2, oct: 1 });
+const ARP_DEF = () => ({ mode: 'ripple', dir: 'up', speed: 2, oct: 1, rate: 1 });
 function cleanArpCfg(c) {
   c = c && typeof c === 'object' ? c : {};
   return {
     mode: ARP_MODES.some(m => m[0] === c.mode) ? c.mode : 'ripple',
     dir: ARP_DIRS.some(d => d[0] === c.dir) ? c.dir : 'up',
-    speed: [2, 3, 4].includes(c.speed) ? c.speed : 2,
-    oct: c.oct === 2 ? 2 : 1
+    speed: [0, 2, 3, 4].includes(c.speed) ? c.speed : 2,   // 0 = All
+    oct: c.oct === 2 ? 2 : 1,
+    rate: [1, 1.5, 2, 3].includes(c.rate) ? c.rate : 1   // Ripple speed
   };
 }
 function cleanArp(a) {
   a = a && typeof a === 'object' ? a : {};
-  return { scope: ARP_SCOPES.some(x => x[0] === a.scope) ? a.scope : 'pattern',
+  return { scope: 'both',   // every step uses its pattern's settings unless it has its own
     banks: [0, 1, 2, 3].map(i => cleanArpCfg(Array.isArray(a.banks) ? a.banks[i] : null)) };
 }
 function sendArp() { engine.send({ type: 'arp', scope: state.arp.scope, banks: clone(state.arp.banks) }); }
@@ -2276,31 +2288,44 @@ function renderArp() {
     ? (s.r ? 'Turn off Rest to add notes' : 'Tap keys to add or remove notes')
     : hasChord ? 'Turn on Chord to edit this chord'
     : 'Turn on, then tap keys for a chord';
-  arpPanel.hidden = !(chordMode || hasChord);
-  if (arpPanel.hidden) return;
+  // always shown, right under the steps, and follows the selected step
   arpPanel.innerHTML = '';
-  const title = document.createElement('div'); title.className = 'arp-title'; title.textContent = 'Arpeggio';
-  arpPanel.appendChild(title);
-  const scopeSeg = seg(ARP_SCOPES, scope, v => { state.arp.scope = v; sendArp(); save(); renderArp(); }, 'Where arpeggio settings live');
-  scopeSeg.classList.add('one-line');   // all three on one line
-  arpPanel.appendChild(row('Settings', scopeSeg));
-  const overriding = scope === 'step' || (scope === 'both' && !!s.arp);
-  if (scope === 'both') arpPanel.appendChild(row('This step', seg([[false, 'Use pattern'], [true, 'Own settings']], !!s.arp, v => {
+  arpPanel.classList.toggle('idle', !hasChord);
+  const head = document.createElement('div'); head.className = 'arp-head';
+  const title = document.createElement('span'); title.className = 'arp-title'; title.textContent = 'Arpeggio';
+  head.append(title);
+  arpPanel.appendChild(head);
+  const group = (label, el, parent = arpPanel) => {
+    const g = document.createElement('div'); g.className = 'agrp';
+    const l = document.createElement('span'); l.className = 'albl'; l.textContent = label;
+    g.append(l, el);
+    parent.appendChild(g);
+  };
+  const overriding = !!s.arp;
+  group('Step ' + (state.sel + 1), seg([[false, 'Pattern'], [true, 'Own']], !!s.arp, v => {
     if (v) s.arp = clone(state.arp.banks[state.bank]); else delete s.arp;
     patternChanged();
-  }, 'Whether this step overrides the pattern')));
+  }, 'Whether this step overrides the pattern'));
   const cfg = overriding ? Object.assign(ARP_DEF(), s.arp || {}) : state.arp.banks[state.bank];
   const set = (key, v) => {
     if (overriding) { s.arp = Object.assign(cfg, { [key]: v }); patternChanged(); }
     else { state.arp.banks[state.bank][key] = v; sendArp(); save(); renderArp(); }
   };
-  arpPanel.appendChild(row('Play', seg(ARP_MODES, cfg.mode, v => set('mode', v), 'How the chord plays')));
-  arpPanel.appendChild(row('Direction', seg(ARP_DIRS, cfg.dir, v => set('dir', v), 'Arpeggio direction')));
-  if (cfg.mode === 'ripple') arpPanel.appendChild(row('Speed', seg([[2, '2 per step'], [3, '3 per step'], [4, '4 per step']], cfg.speed, v => set('speed', v), 'Notes per step')));
-  arpPanel.appendChild(row('Octaves', seg([[1, '1'], [2, '2']], cfg.oct, v => set('oct', v), 'Octaves')));
+  group('Play', seg([['ripple', 'Ripple'], ['across', 'Across'], ['held', 'Held']], cfg.mode, v => set('mode', v), 'How the chord plays'));
+  group('Direction', seg(ARP_DIRS, cfg.dir, v => set('dir', v), 'Arpeggio direction'));
+  if (cfg.mode === 'ripple') {
+    const pair = document.createElement('div'); pair.className = 'apair';   // these two always share a line
+    group('Notes per step', seg([[2, '2'], [3, '3'], [4, '4'], [0, 'All']], cfg.speed, v => set('speed', v), 'Notes per step'), pair);
+    group('Speed', seg([[1, '1×'], [1.5, '1.5×'], [2, '2×'], [3, '3×']], cfg.rate || 1, v => set('rate', v), 'Ripple speed'), pair);
+    arpPanel.appendChild(pair);
+  }
+  group('Octaves', seg([[1, '1'], [2, '2']], cfg.oct, v => set('oct', v), 'Octaves'));
   const note = document.createElement('p'); note.className = 'arp-note';
-  note.textContent = (overriding ? `These settings are step ${state.sel + 1}’s own.` : `These settings are for every chord in pattern ${LETTERS[state.bank]}.`)
-    + (cfg.mode === 'held' ? ' Rest steps after a chord keep playing its notes until the next note.' : cfg.mode === 'across' ? ' Each chord step plays the next note of its chord.' : '');
+  const whose = overriding ? `Step ${state.sel + 1}’s own settings.` : `Pattern ${LETTERS[state.bank]}’s settings.`;
+  const how = cfg.mode === 'held' ? ' Rests after a chord keep playing its notes.' : cfg.mode === 'across' ? ' Each chord step plays the next note of its chord.'
+    : (!cfg.speed ? ' The whole chord runs quickly inside its step.' : ' A quick run inside the step that carries on through the chord into the next.')
+      + ((cfg.rate || 1) > 1 ? ' Faster speeds play it near the start of the step, like a strum.' : '');
+  note.textContent = (hasChord ? whose + how : `Step ${state.sel + 1} has no chord: these apply once it has one.`);
   arpPanel.appendChild(note);
 }
 
