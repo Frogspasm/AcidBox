@@ -266,6 +266,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .dest-tools .ghost { height: 40px; }
 .knob.pick { outline: 2px dashed var(--led); outline-offset: 2px; cursor: copy; }
 .moddot { pointer-events: none; }
+.knob.modded .kval { color: var(--led); }
 @media (max-width: 520px) { .dest { grid-template-columns: 1fr auto auto; } .dest .mstep { grid-column: 1 / -1; grid-row: 2; } }
 .share-help { margin: 2px 4px 10px; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
 .share-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
@@ -466,6 +467,19 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .bk { height: 60%; z-index: 2; background: var(--key-black); border-radius: 0 0 7px 7px; }
 .key[aria-pressed="true"] { background: var(--key-sel); color: var(--on-led); }
 .edrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+#tChord[aria-pressed="true"] { background: var(--led); border-color: var(--led); color: var(--on-led); }
+.chord-read { flex: 1 1 120px; min-width: 110px; max-width: 220px; font-size: 12px; color: var(--ink-soft); line-height: 1.3; }
+.arp { display: grid; gap: 10px; padding: 12px; border-radius: 16px; background: var(--cell); }
+.arp[hidden] { display: none; }
+.arp .wave-row { margin-top: 0; }
+.arp .seg { flex-wrap: wrap; border-radius: 22px; max-width: 100%; }
+.arp .seg button { height: 36px; min-width: 0; padding: 0 12px; white-space: nowrap; }
+.arp .seg.one-line { flex-wrap: nowrap; }
+.arp .seg { min-width: 0; }   /* let long rows wrap inside the panel instead of running off the edge */
+@media (max-width: 440px) { .arp .seg button { padding: 0 8px; font-size: 13px; } .arp { padding: 10px 8px; } }
+.arp-title { font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.arp-note { font-size: 12px; color: var(--ink-soft); margin: 0; line-height: 1.4; }
+.nn .chd { font-size: 10px; font-weight: 700; margin-left: 2px; color: var(--led); }
 .tog { height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 999px; background: transparent; font-weight: 600; }
 .tog[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 #tAcc[aria-pressed="true"] { background: var(--led); border-color: var(--led); color: var(--on-led); }
@@ -611,7 +625,10 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
         <button class="tog" id="tAcc" aria-pressed="false">Accent</button>
         <button class="tog" id="tSlide" aria-pressed="false">Slide</button>
         <button class="tog" id="tRest" aria-pressed="false">Rest</button>
+        <button class="tog" id="tChord" aria-pressed="false">Chord</button>
+        <span class="chord-read" id="chordRead">Turn on, then tap keys for a chord</span>
       </div>
+      <div class="arp" id="arpPanel" hidden></div>
     </div>
     </div>
   </section>
@@ -824,6 +841,8 @@ class AcidCore {
     // waves (modulation): the knob values you set live in base; p holds them with the waves applied
     this.base = Object.assign({}, this.p);
     this.mods = []; this.modTargets = []; this.beatPos = 0; this.noteTrig = 0;
+    // arpeggios: settings per pattern, which settings win, and the running arps
+    this.arpScope = 'pattern'; this.arpBanks = [0, 1, 2, 3].map(() => AcidCore.ARP_DEFAULT); this.arpCount = 0; this.rip = null; this.held = null;
     this.modState = [0, 1, 2, 3].map(() => ({ ph: 0, ps: 0, rnd: 0.5, note: -1, w: 0, on: false }));   // per-drum hit loudness: 1 for grid hits, MIDI velocity / 127 for played hits
     this.rvSleep = false; this.rvQuiet = 0; this.dlSleep = false; this.dlQuiet = 0;
     this.chInc = new Float64Array(6); this.ohInc = new Float64Array(6);
@@ -845,6 +864,7 @@ class AcidCore {
     switch (m.type) {
       case 'params': Object.assign(this.p, m.params); Object.assign(this.base, m.params); break;
       case 'mods': this.setMods(m.mods); break;
+      case 'arp': this.arpScope = m.scope || 'pattern'; if (Array.isArray(m.banks)) this.arpBanks = m.banks.map(c => Object.assign({}, AcidCore.ARP_DEFAULT, c)); break;
       case 'bank': this.banks[m.index] = m.pattern; this.dbanks[m.index] = m.drums; break;
       case 'loopBank':
         this.loopBank = m.index; this.loopDrum = m.drums === undefined ? m.index : m.drums;
@@ -887,8 +907,48 @@ class AcidCore {
   }
   setPlaying(on) {
     if (on && !this.playing) { this.step = 0; this.toNext = 0; this.prevSlide = false; this.pos = -1; this.beatPos = 0; }
-    if (!on) { this.gateLeft = 0; this.prevSlide = false; if (this.onStep) this.onStep(-1); }
+    if (!on) { this.gateLeft = 0; this.prevSlide = false; this.rip = null; this.held = null; if (this.onStep) this.onStep(-1); }
+    if (on && !this.playing) this.arpCount = 0;
     this.playing = on;
+  }
+  playNote(n, o, acc, slide, gate, tied) {
+    this.target = this.hz(n, o);
+    this.accLevel = acc ? 1 : 0;
+    if (!tied) { this.freq = this.target; this.fenv = 1; this.accEnv = 1; this.noteTrig++; }
+    else if (acc) { this.accEnv = 1; }
+    this.gateLeft = gate;
+    this.prevSlide = slide;
+  }
+  static get ARP_DEFAULT() { return { mode: 'ripple', dir: 'up', speed: 2, oct: 1 }; }
+  // which arp settings a step uses: the pattern's, its own, or its own when it has them
+  arpCfg(s) {
+    const pat = this.arpBanks[this.ab] || AcidCore.ARP_DEFAULT;
+    if (this.arpScope === 'step') return Object.assign({}, AcidCore.ARP_DEFAULT, s.arp || {});
+    if (this.arpScope === 'both' && s.arp) return Object.assign({}, pat, s.arp);
+    return pat;
+  }
+  // the chord's notes low to high, repeated an octave up when Octaves is 2
+  static arpSeq(ns, o, oct) {
+    const base = ns.slice().sort((a, b) => a - b).map(n => [n, o]);
+    return oct === 2 ? base.concat(base.map(([n, oo]) => [n + 12, oo])) : base;
+  }
+  static arpPick(seq, dir, i, core) {
+    const L = seq.length;
+    if (L === 1) return seq[0];
+    if (dir === 'down') return seq[L - 1 - (i % L)];
+    if (dir === 'updown') { const per = 2 * L - 2, j = i % per; return seq[j < L ? j : per - j]; }
+    if (dir === 'random') {   // never the same note twice in a row
+      let k = Math.floor(Math.random() * L);
+      if (k === core.lastArp) k = (k + 1 + Math.floor(Math.random() * (L - 1))) % L;
+      core.lastArp = k;
+      return seq[k];
+    }
+    return seq[i % L];
+  }
+  ripNext() {
+    const r = this.rip, [n, o] = AcidCore.arpPick(r.seq, r.cfg.dir, r.i++, this);
+    this.playNote(n, o, r.a, r.sl, r.sl ? r.per * 1.05 : r.per * 0.5, r.sl && this.gateLeft > 0);
+    if (--r.left <= 0) this.rip = null; else r.wait += r.per;
   }
   audition(n, o, a) {
     if (this.playing) return;
@@ -906,23 +966,52 @@ class AcidCore {
     this.trigDrums(this.dbanks[this.adb][this.step] | 0);
     const s = this.banks[this.ab][this.step];
     const tied = this.prevSlide && this.gateLeft > 0;
+    const chord = s && !s.r && Array.isArray(s.ns) && s.ns.length > 1 ? s.ns : null;
     if (this.live.length) {
       // a held MIDI note takes over the bass line; drums keep running
-    } else if (s && !s.r) {
+      this.rip = null; this.held = null;
+    } else if (s && !s.r && !chord) {
+      this.rip = null; this.held = null;
       this.target = this.hz(s.n, s.o);
       this.accLevel = s.a ? 1 : 0;
       if (!tied) { this.freq = this.target; this.fenv = 1; this.accEnv = 1; this.noteTrig++; }
       else if (s.a) { this.accEnv = 1; }
       this.gateLeft = s.s ? sps * 1.05 : sps * 0.5;
       this.prevSlide = s.s;
+    } else if (chord) {
+      // a chord on this step plays as an arpeggio
+      const cfg = this.arpCfg(s), seq = AcidCore.arpSeq(chord, s.o, cfg.oct);
+      this.rip = null; this.held = null;
+      if (cfg.mode === 'across') {
+        const [n, o] = AcidCore.arpPick(seq, cfg.dir, this.arpCount++, this);
+        this.playNote(n, o, s.a, s.s, s.s ? sps * 1.05 : sps * 0.5, tied);
+      } else if (cfg.mode === 'held') {
+        const [n, o] = AcidCore.arpPick(seq, cfg.dir, 0, this);
+        this.playNote(n, o, s.a, s.s, s.s ? sps * 1.05 : sps * 0.5, tied);
+        this.held = { seq, cfg, i: 1, a: s.a, sl: s.s };
+      } else {   // ripple: several notes inside the step
+        const per = sps / cfg.speed;
+        const [n, o] = AcidCore.arpPick(seq, cfg.dir, 0, this);
+        this.playNote(n, o, s.a, s.s, s.s ? per * 1.05 : per * 0.5, tied);
+        this.rip = { seq, cfg, i: 1, left: cfg.speed - 1, wait: per, per, a: s.a, sl: s.s };
+      }
+    } else if (this.held && s && s.r) {
+      // Held steps: the rests after a chord keep stepping through it
+      const h = this.held, [n, o] = AcidCore.arpPick(h.seq, h.cfg.dir, h.i++, this);
+      this.playNote(n, o, h.a, h.sl, h.sl ? sps * 1.05 : sps * 0.5, h.sl && this.gateLeft > 0);
     } else {
-      this.gateLeft = 0; this.prevSlide = false;
+      this.gateLeft = 0; this.prevSlide = false; this.rip = null; this.held = null;
     }
     if (this.onStep) this.onStep(this.step);
     this.step = (this.step + 1) % 16;
   }
   process(L, R, n) {
-    if (!this.modTargets.length) { this.beatPos += n * this.p.tempo / 60 / this.sr; this.render(L, R, 0, n); return; }
+    if (!this.modTargets.length) {
+      // waves with nowhere to send still run (once per block), so their graphs and readouts move
+      if (this.mods.length) this.modulate(n); else this.beatPos += n * this.p.tempo / 60 / this.sr;
+      this.render(L, R, 0, n);
+      return;
+    }
     for (let off = 0; off < n; off += 32) {
       const len = Math.min(32, n - off);
       this.modulate(len);
@@ -1078,6 +1167,7 @@ class AcidCore {
       if (this.playing) {
         this.toNext -= 1;
         if (this.toNext <= 0) { this.trigger(sps); this.toNext += sps; }
+        if (this.rip && --this.rip.wait <= 0) this.ripNext();
       }
       const gate = this.gateLeft > 0 || this.live.length > 0;
       if (gate) this.gateLeft -= 1;
@@ -1478,6 +1568,7 @@ const engine = {
       sendLoop();
       sendSong();
       sendMods();
+      sendArp();
       renderRate();
     })();
     return this.ready;
@@ -1534,8 +1625,8 @@ const KNOBS = [
 ];
 const SPACE_KNOBS = [
   { id: 'delay', label: 'Echo', def: 0.25 },
-  { id: 'rsize', label: 'Room size', def: 0.5 },
-  { id: 'reverb', label: 'Reverb', def: 0.3 }
+  { id: 'reverb', label: 'Reverb', def: 0.3 },
+  { id: 'rsize', label: 'Room size', def: 0.5 }
 ];
 const OUT_KNOBS = [
   { id: 'outlvl', label: 'Level', def: 1, fmt: v => v >= 0.999 ? '0 dB' : ((v - 1) * 30).toFixed(1) + ' dB' }
@@ -1647,6 +1738,7 @@ state.params.rmode = -1;   // None
 state.params.space = 1;
 state.params.ftype = 0;    // Ladder
 state.mods = [];           // waves
+state.arp = { scope: 'pattern', banks: [0, 1, 2, 3].map(() => ({ mode: 'ripple', dir: 'up', speed: 2, oct: 1 })) };   // arpeggios
 state.params.cmp = 0;
 const DEFAULT_PARAMS = Object.assign({ wave: 0, wave2: 0, interval: 0 }, state.params);
 
@@ -1665,6 +1757,7 @@ try {
     if (typeof saved.skin === 'string') state.skin = saved.skin;
     if (saved.customSkin && typeof saved.customSkin.bg === 'string') state.customSkin = saved.customSkin;
     if (Array.isArray(saved.mods)) state.mods = saved.mods;   // checked by cleanMods once the knob lists exist
+    if (saved.arp) state.arp = saved.arp;   // checked by cleanArp once the arp code has loaded
   }
 } catch (e) { /* storage unavailable: use defaults */ }
 
@@ -1672,7 +1765,7 @@ let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ params: state.params, banks: state.banks, drumBanks: state.drumBanks, bank: state.bank, dbank: state.dbank, song: state.song, songOn: state.songOn, midi: state.midi, skin: state.skin, customSkin: state.customSkin || null, mods: state.mods })); } catch (e) {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ params: state.params, banks: state.banks, drumBanks: state.drumBanks, bank: state.bank, dbank: state.dbank, song: state.song, songOn: state.songOn, midi: state.midi, skin: state.skin, customSkin: state.customSkin || null, mods: state.mods, arp: state.arp })); } catch (e) {}
   }, 300);
   noteChange();
 }
@@ -1683,7 +1776,7 @@ function save() {
 var undoStack = [], redoStack = [], committed = null, commitTimer = null;
 function snapshot() {
   const { tempo, ...p } = state.params;
-  return JSON.stringify({ p, b: state.banks, d: state.drumBanks, s: state.song, m: state.mods });
+  return JSON.stringify({ p, b: state.banks, d: state.drumBanks, s: state.song, m: state.mods, a: state.arp });
 }
 function noteChange() {
   if (committed === null) return;
@@ -1742,6 +1835,7 @@ function buildKnob(k) {
     </svg><span class="klabel">${k.label}</span><span class="kval"></span>`;
   const valPath = el.querySelector('.val'), ind = el.querySelector('.ind'), out = el.querySelector('.kval');
   const fmt = k.fmt || (v => Math.round(v * 100));
+  el._fmt = fmt;   // the Waves code shows moving values with the knob's own format
 
   function draw() {
     const v = state.params[k.id], a = A0 + v * SPAN;
@@ -1802,6 +1896,7 @@ OSC_KNOBS.forEach(k => oscKnobsEl.appendChild(buildKnob(k)));
 const playBtn = document.getElementById('play');
 const hint = document.getElementById('hint');
 playBtn.addEventListener('click', async () => {
+  if (state.playing) wakeOff(); else wakeOn();   // ask straight away, while the tap still counts
   try {
     const p = engine.init();
     engine.ctx.resume();
@@ -2038,7 +2133,8 @@ for (let i = 0; i < 16; i++) {
 function noteLabel(s) {
   if (s.r) return '–';
   const oct = s.o > 0 ? '<sup>+</sup>' : s.o < 0 ? '<sup>−</sup>' : '';
-  return NOTE_NAMES[s.n] + oct;
+  const chd = s.ns && s.ns.length > 1 ? `<span class="chd">+${s.ns.length - 1}</span>` : '';   // a chord: root plus how many more
+  return NOTE_NAMES[s.n] + oct + chd;
 }
 function renderSteps() {
   pat().forEach((s, i) => {
@@ -2050,7 +2146,8 @@ function renderSteps() {
     c.querySelector('.nn').innerHTML = noteLabel(s);
     const pitch = s.n + 12 * s.o;
     c.querySelector('.bar i').style.height = (12 + ((pitch + 12) / 36) * 88).toFixed(1) + '%';
-    const desc = s.r ? 'rest' : NOTE_NAMES[s.n] + (s.o > 0 ? ' high' : s.o < 0 ? ' low' : '') + (s.a ? ', accent' : '') + (s.s ? ', slide' : '');
+    const notes = s.ns && s.ns.length > 1 ? 'chord ' + s.ns.map(n => NOTE_NAMES[n]).join(' ') : NOTE_NAMES[s.n];
+    const desc = s.r ? 'rest' : notes + (s.o > 0 ? ' high' : s.o < 0 ? ' low' : '') + (s.a ? ', accent' : '') + (s.s ? ', slide' : '');
     c.setAttribute('aria-label', `Step ${i + 1}: ${desc}`);
     c.setAttribute('aria-pressed', String(i === state.sel));
   });
@@ -2098,9 +2195,19 @@ BLACK.forEach(([n, after]) => {
 });
 keys.forEach((k, n) => k.addEventListener('click', async () => {
   const s = pat()[state.sel];
-  s.n = n; s.r = false;
+  if (chordMode && !s.r) {
+    // Chord on: each key adds or removes a note (a step keeps at least one, and at most six)
+    let ns = s.ns ? s.ns.slice() : [s.n];
+    if (ns.includes(n)) { if (ns.length > 1) ns = ns.filter(x => x !== n); }
+    else if (ns.length < 6) ns.push(n);
+    ns.sort((a, b) => a - b);
+    s.n = ns[0];
+    if (ns.length > 1) s.ns = ns; else delete s.ns;
+  } else {
+    s.n = n; s.r = false; delete s.ns;
+  }
   patternChanged();
-  try { const p = engine.init(); engine.ctx.resume(); await p; engine.send({ type: 'audition', n: s.n, o: s.o, a: s.a }); } catch (e) {}
+  try { const p = engine.init(); engine.ctx.resume(); await p; engine.send({ type: 'audition', n, o: s.o, a: s.a }); } catch (e) {}
 }));
 
 const octBtns = [...document.querySelectorAll('#octs button')];
@@ -2118,13 +2225,85 @@ tRest.addEventListener('click', () => { const s = pat()[state.sel]; s.r = !s.r; 
 const edTitle = document.getElementById('edTitle');
 function renderEditor() {
   const s = pat()[state.sel];
-  edTitle.innerHTML = `Step ${state.sel + 1} <span>${s.r ? 'rest' : NOTE_NAMES[s.n] + (s.o > 0 ? ', high' : s.o < 0 ? ', low' : '')}</span>`;
-  keys.forEach((k, n) => k.setAttribute('aria-pressed', String(!s.r && s.n === n)));
+  const chordNotes = s.ns && s.ns.length > 1 ? s.ns : null;
+  edTitle.innerHTML = `Step ${state.sel + 1} <span>${s.r ? 'rest' : (chordNotes ? chordNotes.map(n => NOTE_NAMES[n]).join(' ') : NOTE_NAMES[s.n]) + (s.o > 0 ? ', high' : s.o < 0 ? ', low' : '')}</span>`;
+  keys.forEach((k, n) => k.setAttribute('aria-pressed', String(!s.r && (chordNotes ? chordNotes.includes(n) : s.n === n))));
   octBtns.forEach(b => b.setAttribute('aria-pressed', String(!s.r && +b.dataset.oct === s.o)));
   tAcc.setAttribute('aria-pressed', String(s.a));
   tSlide.setAttribute('aria-pressed', String(s.s));
   tRest.setAttribute('aria-pressed', String(s.r));
+  renderArp();
 }
+
+// ===================== Arpeggios =====================
+// A step can hold a chord (Chord switch on, then tap several keys). Chords play as arpeggios:
+//   Ripple: a quick run inside the step · Across steps: one note per step, a counter moving through the
+//   chord · Held steps: the rests after a chord keep stepping through it.
+// Settings live per pattern, per step, or per pattern with step overrides (the switch at the top).
+const ARP_MODES = [['ripple', 'Ripple'], ['across', 'Across steps'], ['held', 'Held steps']];
+const ARP_DIRS = [['up', 'Up'], ['down', 'Down'], ['updown', 'Up/Down'], ['random', 'Random']];
+const ARP_SCOPES = [['pattern', 'Pattern'], ['step', 'Step'], ['both', 'Pattern + Override']];
+const ARP_DEF = () => ({ mode: 'ripple', dir: 'up', speed: 2, oct: 1 });
+function cleanArpCfg(c) {
+  c = c && typeof c === 'object' ? c : {};
+  return {
+    mode: ARP_MODES.some(m => m[0] === c.mode) ? c.mode : 'ripple',
+    dir: ARP_DIRS.some(d => d[0] === c.dir) ? c.dir : 'up',
+    speed: [2, 3, 4].includes(c.speed) ? c.speed : 2,
+    oct: c.oct === 2 ? 2 : 1
+  };
+}
+function cleanArp(a) {
+  a = a && typeof a === 'object' ? a : {};
+  return { scope: ARP_SCOPES.some(x => x[0] === a.scope) ? a.scope : 'pattern',
+    banks: [0, 1, 2, 3].map(i => cleanArpCfg(Array.isArray(a.banks) ? a.banks[i] : null)) };
+}
+function sendArp() { engine.send({ type: 'arp', scope: state.arp.scope, banks: clone(state.arp.banks) }); }
+var chordMode = false;
+try { chordMode = localStorage.getItem('acidbox.chord') === '1'; } catch (e) {}
+var tChord = document.getElementById('tChord'), chordRead = document.getElementById('chordRead'), arpPanel = document.getElementById('arpPanel');
+state.arp = cleanArp(state.arp);
+tChord.addEventListener('click', () => {
+  chordMode = !chordMode;
+  try { localStorage.setItem('acidbox.chord', chordMode ? '1' : '0'); } catch (e) {}
+  renderEditor();
+});
+function renderArp() {
+  if (!arpPanel) return;   // not built yet during start-up
+  const s = pat()[state.sel], hasChord = !s.r && s.ns && s.ns.length > 1, scope = state.arp.scope;
+  tChord.setAttribute('aria-pressed', String(chordMode));
+  chordRead.textContent = chordMode
+    ? (s.r ? 'Turn off Rest to add notes' : 'Tap keys to add or remove notes')
+    : hasChord ? 'Turn on Chord to edit this chord'
+    : 'Turn on, then tap keys for a chord';
+  arpPanel.hidden = !(chordMode || hasChord);
+  if (arpPanel.hidden) return;
+  arpPanel.innerHTML = '';
+  const title = document.createElement('div'); title.className = 'arp-title'; title.textContent = 'Arpeggio';
+  arpPanel.appendChild(title);
+  const scopeSeg = seg(ARP_SCOPES, scope, v => { state.arp.scope = v; sendArp(); save(); renderArp(); }, 'Where arpeggio settings live');
+  scopeSeg.classList.add('one-line');   // all three on one line
+  arpPanel.appendChild(row('Settings', scopeSeg));
+  const overriding = scope === 'step' || (scope === 'both' && !!s.arp);
+  if (scope === 'both') arpPanel.appendChild(row('This step', seg([[false, 'Use pattern'], [true, 'Own settings']], !!s.arp, v => {
+    if (v) s.arp = clone(state.arp.banks[state.bank]); else delete s.arp;
+    patternChanged();
+  }, 'Whether this step overrides the pattern')));
+  const cfg = overriding ? Object.assign(ARP_DEF(), s.arp || {}) : state.arp.banks[state.bank];
+  const set = (key, v) => {
+    if (overriding) { s.arp = Object.assign(cfg, { [key]: v }); patternChanged(); }
+    else { state.arp.banks[state.bank][key] = v; sendArp(); save(); renderArp(); }
+  };
+  arpPanel.appendChild(row('Play', seg(ARP_MODES, cfg.mode, v => set('mode', v), 'How the chord plays')));
+  arpPanel.appendChild(row('Direction', seg(ARP_DIRS, cfg.dir, v => set('dir', v), 'Arpeggio direction')));
+  if (cfg.mode === 'ripple') arpPanel.appendChild(row('Speed', seg([[2, '2 per step'], [3, '3 per step'], [4, '4 per step']], cfg.speed, v => set('speed', v), 'Notes per step')));
+  arpPanel.appendChild(row('Octaves', seg([[1, '1'], [2, '2']], cfg.oct, v => set('oct', v), 'Octaves')));
+  const note = document.createElement('p'); note.className = 'arp-note';
+  note.textContent = (overriding ? `These settings are step ${state.sel + 1}’s own.` : `These settings are for every chord in pattern ${LETTERS[state.bank]}.`)
+    + (cfg.mode === 'held' ? ' Rest steps after a chord keep playing its notes until the next note.' : cfg.mode === 'across' ? ' Each chord step plays the next note of its chord.' : '');
+  arpPanel.appendChild(note);
+}
+
 
 // ===================== Groove section =====================
 const ROWS = [['Kick', K], ['Snare', SN], ['Clap', CP], ['Closed hat', CH], ['Open hat', OH]];
@@ -2391,6 +2570,7 @@ async function renderSong(onProgress) {
   const core = new AcidCore(sr);
   core.apply({ type: 'params', params: { ...state.params } });
   core.apply({ type: 'mods', mods: JSON.parse(JSON.stringify(state.mods || [])) });   // waves render into the file too
+  core.apply({ type: 'arp', scope: state.arp.scope, banks: JSON.parse(JSON.stringify(state.arp.banks)) });
   for (let i = 0; i < 4; i++) {
     core.apply({ type: 'bank', index: i, pattern: JSON.parse(JSON.stringify(state.banks[i])), drums: state.drumBanks[i].slice() });
   }
@@ -2853,6 +3033,7 @@ midiDebugCopy.addEventListener('click', async () => {
 
 function transport(on, restart) {
   if (restart && state.playing) engine.send({ type: 'play', on: false });
+  if (on) wakeOn(); else wakeOff();
   state.playing = on;
   playBtn.textContent = on ? 'Stop' : 'Play';
   playBtn.setAttribute('aria-pressed', String(on));
@@ -3167,7 +3348,8 @@ function restoreSnapshot(json) {
   state.params = Object.assign({}, snap.p, { tempo: state.params.tempo });
   state.banks = snap.b; state.drumBanks = snap.d; state.song = normSong(snap.s);
   state.mods = Array.isArray(snap.m) ? snap.m : [];
-  sendMods(); renderWaves();
+  if (snap.a) state.arp = snap.a;
+  sendMods(); renderWaves(); sendArp();
   committed = json;
   engine.send({ type: 'params', params: { ...state.params } });
   for (let i = 0; i < 4; i++) sendBank(i);
@@ -3244,6 +3426,7 @@ function savePreset() {
   }
   const { tempo, ...sound } = state.params;
   const p = { name, kind: presetKind, saved: Date.now(), params: clone(sound), mods: clone(state.mods) };
+  if (presetKind === 'full') p.arp = clone(state.arp);
   if (presetKind === 'full') Object.assign(p, { tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
   const before = presets.slice();
   if (idx >= 0) presets.splice(idx, 1);
@@ -3266,7 +3449,8 @@ function loadPreset(i) {
     if (Array.isArray(pr.song) && pr.song.length) state.song = normSong(pr.song);
   }
   state.mods = cleanMods(pr.mods);
-  sendMods(); renderWaves();
+  if (full && pr.arp) state.arp = cleanArp(pr.arp);
+  sendMods(); renderWaves(); sendArp();
   engine.send({ type: 'params', params: { ...state.params } });
   for (let b = 0; b < 4; b++) sendBank(b);
   sendSong();
@@ -3347,8 +3531,8 @@ function soundOnly(params) { const { tempo, outlvl, ...sound } = params; return 
 function makeFile(kind, name, src) {
   const f = { acidbox: ACIDBOX_FILE, kind, name };
   if (kind === 'sound') { f.params = soundOnly(src.params); f.mods = clone(src.mods || []); }
-  else if (kind === 'pattern') { f.bass = clone(src.bass); f.drums = clone(src.drums); }
-  else if (kind === 'song') Object.assign(f, { tempo: src.tempo, params: soundOnly(src.params), mods: clone(src.mods || []), banks: clone(src.banks), drumBanks: clone(src.drumBanks), song: clone(src.song), songOn: !!src.songOn });
+  else if (kind === 'pattern') { f.bass = clone(src.bass); f.drums = clone(src.drums); if (src.arp) f.arp = clone(src.arp); }
+  else if (kind === 'song') Object.assign(f, { tempo: src.tempo, params: soundOnly(src.params), mods: clone(src.mods || []), arp: clone(src.arp || null), banks: clone(src.banks), drumBanks: clone(src.drumBanks), song: clone(src.song), songOn: !!src.songOn });
   else if (kind === 'skin') f.colors = clone(src.colors);
   return f;
 }
@@ -3385,9 +3569,9 @@ document.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click
   if (kind === 'sound') shareFile(makeFile('sound', typed || 'AcidBox sound', { params: state.params, mods: state.mods }));
   else if (kind === 'pattern') {
     const label = LETTERS[state.bank] + (state.dbank !== state.bank ? ' / drums ' + LETTERS[state.dbank] : '');
-    shareFile(makeFile('pattern', typed || 'AcidBox pattern ' + label, { bass: state.banks[state.bank], drums: state.drumBanks[state.dbank] }));
+    shareFile(makeFile('pattern', typed || 'AcidBox pattern ' + label, { bass: state.banks[state.bank], drums: state.drumBanks[state.dbank], arp: state.arp.banks[state.bank] }));
   } else if (kind === 'song') {
-    shareFile(makeFile('song', typed || 'AcidBox song', { tempo: state.params.tempo, params: state.params, mods: state.mods, banks: state.banks, drumBanks: state.drumBanks, song: state.song, songOn: state.songOn }));
+    shareFile(makeFile('song', typed || 'AcidBox song', { tempo: state.params.tempo, params: state.params, mods: state.mods, arp: state.arp, banks: state.banks, drumBanks: state.drumBanks, song: state.song, songOn: state.songOn }));
   } else if (kind === 'skin') {
     if (!state.customSkin) { shareSay('Make a custom skin first: pick its colours in the Skins section.'); return; }
     const { base, ...colors } = state.customSkin;
@@ -3415,16 +3599,23 @@ function cleanParams(p) {
   }
   return out;
 }
-const cleanStep = x => (x && typeof x === 'object')
-  ? { n: Math.max(0, Math.min(12, x.n | 0)), o: Math.max(-1, Math.min(1, x.o | 0)), a: !!x.a, s: !!x.s, r: !!x.r }
-  : R();
+const cleanStep = x => {
+  if (!x || typeof x !== 'object') return R();
+  const st = { n: Math.max(0, Math.min(12, x.n | 0)), o: Math.max(-1, Math.min(1, x.o | 0)), a: !!x.a, s: !!x.s, r: !!x.r };
+  if (Array.isArray(x.ns)) {
+    const ns = [...new Set(x.ns.map(v => v | 0).filter(v => v >= 0 && v <= 12))].sort((a, b) => a - b).slice(0, 6);
+    if (ns.length > 1) { st.ns = ns; st.n = ns[0]; }
+  }
+  if (x.arp && typeof x.arp === 'object') st.arp = cleanArpCfg(x.arp);
+  return st;
+};
 const cleanBass = arr => Array.isArray(arr) ? Array.from({ length: 16 }, (_, i) => cleanStep(arr[i])) : null;
 const cleanDrums = arr => Array.isArray(arr) ? Array.from({ length: 16 }, (_, i) => Math.max(0, arr[i] | 0) & 31) : null;
 const HEX = /^#[0-9a-f]{6}$/i;
 
 function refreshAfterLoad() {
   engine.send({ type: 'params', params: { ...state.params } });
-  sendMods(); renderWaves();
+  sendMods(); renderWaves(); sendArp();
   for (let b = 0; b < 4; b++) sendBank(b);
   sendSong();
   tempoVal.textContent = state.params.tempo;
@@ -3459,6 +3650,7 @@ async function openFile(f) {
     const bass = cleanBass(d.bass), drums = cleanDrums(d.drums);
     if (!bass && !drums) { shareSay('That pattern file is empty.'); return; }
     if (bass) state.banks[state.bank] = bass;
+    if (d.arp && typeof d.arp === 'object') state.arp.banks[state.bank] = cleanArpCfg(d.arp);
     if (drums) state.drumBanks[state.dbank] = drums;
     refreshAfterLoad();
     shareSay(`Loaded “${name}” into pattern ${LETTERS[state.bank]}${state.dbank !== state.bank ? ' and drums ' + LETTERS[state.dbank] : ''}. Tap Undo to go back.` + newer);
@@ -3471,8 +3663,9 @@ async function openFile(f) {
     if (banks) state.banks = banks;
     if (drumBanks) state.drumBanks = drumBanks;
     if (Array.isArray(d.song) && d.song.length) state.song = normSong(d.song);
+    if (d.arp) state.arp = cleanArp(d.arp);
     refreshAfterLoad();
-    addSharedPreset({ name, kind: 'full', saved: Date.now(), params: soundOnly(state.params), mods: clone(state.mods), tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
+    addSharedPreset({ name, kind: 'full', saved: Date.now(), params: soundOnly(state.params), mods: clone(state.mods), arp: clone(state.arp), tempo, banks: clone(state.banks), drumBanks: clone(state.drumBanks), song: clone(state.song) });
     shareSay(`Loaded the song “${name}” and added it to your presets. Tap Undo to go back.` + newer);
   } else if (d.kind === 'skin') {
     const c = d.colors || {};
@@ -3690,7 +3883,9 @@ function renderWaves() {
   svg.innerHTML = '<line class="mid" x1="0" y1="100" x2="640" y2="100"/><g class="pts"></g><path class="curve"/><line class="start" y1="0" y2="200"/><circle class="dot" r="8" cx="-20" cy="100"/>';
   waveBody.appendChild(svg);
   const tip = document.createElement('p'); tip.className = 'wave-tip';
-  tip.textContent = m.shape === 'custom' ? 'Draw on the graph to change it. Smooth turns steps into curves.' : 'Draw on the graph to reshape it (it becomes Custom).';
+  tip.textContent = m.shape === 'custom' ? 'Draw on the graph to change it. Smooth turns steps into curves.'
+    : m.shape === 'random' ? 'Random picks a new value each cycle. The graph shows the last eight it picked, newest on the right (press Play to see them).'
+    : 'Draw on the graph to reshape it (it becomes Custom).';
   waveBody.appendChild(tip);
   if (m.shape === 'custom') {
     const read = document.createElement('span'); read.className = 'mread'; read.textContent = Math.round(m.smooth * 100) + '%';
@@ -3807,14 +4002,22 @@ function drawWaveGraph() {
   const pts = svg.querySelector('.pts'), curve = svg.querySelector('.curve');
   pts.innerHTML = m.shape === 'custom' ? m.pts.map((v, i) => `<rect x="${i * 20 + 2}" y="${(1 - v) * 200}" width="16" height="${v * 200}"/>`).join('') : '';
   let d = '';
-  for (let x = 0; x <= 160; x++) {
-    const ph = Math.min(0.99999, x / 160), v = m.shape === 'random' ? (Math.floor(ph * 4) * 0.37 + 0.2) % 1 : AcidCore.waveAt(m, ph, 0.5);
-    d += (x ? 'L' : 'M') + (x * 4) + ' ' + ((1 - v) * 184 + 8).toFixed(1);
+  const yOf = v => ((1 - v) * 184 + 8).toFixed(1);
+  if (m.shape === 'random') {
+    // Random has no fixed shape: show the values it has actually picked, one per cycle, newest on the right
+    const h = randHist[waveSel], seg = 640 / RAND_N, pad = RAND_N - h.length;
+    if (!h.length) d = `M0 ${yOf(0.5)} L640 ${yOf(0.5)}`;
+    h.forEach((v, j) => { const x = (pad + j) * seg; d += (j ? 'L' : 'M') + x.toFixed(1) + ' ' + yOf(v) + 'L' + (x + seg).toFixed(1) + ' ' + yOf(v); });
+  } else {
+    for (let x = 0; x <= 160; x++) {
+      const ph = Math.min(0.99999, x / 160), v = AcidCore.waveAt(m, ph, 0.5);
+      d += (x ? 'L' : 'M') + (x * 4) + ' ' + yOf(v);
+    }
   }
   curve.setAttribute('d', d);
   const start = svg.querySelector('.start'), x0 = ((m.off || 0) * 640).toFixed(1);
   start.setAttribute('x1', x0); start.setAttribute('x2', x0);
-  start.style.display = (m.off || 0) > 0.001 ? '' : 'none';
+  start.style.display = (m.off || 0) > 0.001 && m.shape !== 'random' ? '' : 'none';
   drawWaveDot();
 }
 function drawWaveDot() {
@@ -3822,14 +4025,38 @@ function drawWaveDot() {
   if (!svg || !m) return;
   const dot = svg.querySelector('.dot'), live = modLive && performance.now() - modLiveAt < 400 ? modLive[waveSel] : null;
   if (!live || !m.on) { dot.setAttribute('cx', -20); return; }
-  dot.setAttribute('cx', (live[1] * 640).toFixed(1));
+  // on Random the newest value is the last step, so the dot rides along that
+  dot.setAttribute('cx', (m.shape === 'random' ? (RAND_N - 1 + live[1]) / RAND_N * 640 : live[1] * 640).toFixed(1));
   dot.setAttribute('cy', ((1 - (live[0] + 1) / 2) * 184 + 8).toFixed(1));
 }
 // from the engine about 20 times a second: each wave's value and position
+// Random: the values each wave has actually picked (one per cycle, newest last), for its graph
+const RAND_N = 8;
+const randHist = [[], [], [], []], randLastPh = [0, 0, 0, 0];
+let randDirty = false;
+function noteRandom(mv) {
+  for (let k = 0; k < 4; k++) {
+    const m = state.mods[k], live = mv[k], h = randHist[k];
+    if (!m || m.shape !== 'random') { h.length = 0; continue; }
+    if (!m.on || !live) continue;
+    const v = (live[0] + 1) / 2, newCycle = live[1] < randLastPh[k] - 0.5;
+    randLastPh[k] = live[1];
+    if (!h.length || newCycle || Math.abs(h[h.length - 1] - v) > 1e-6) {
+      h.push(v);
+      if (h.length > RAND_N) h.shift();
+      if (k === waveSel) randDirty = true;
+    }
+  }
+}
 function modFeed(mv) {
   if (!mv) return;
   modLive = mv; modLiveAt = performance.now();
-  if (!modRaf) modRaf = requestAnimationFrame(() => { modRaf = 0; drawWaveDot(); refreshModDots(); });
+  noteRandom(mv);
+  if (!modRaf) modRaf = requestAnimationFrame(() => {
+    modRaf = 0;
+    if (randDirty) { randDirty = false; drawWaveGraph(); } else drawWaveDot();
+    refreshModDots();
+  });
 }
 // dots on the knobs: where the waves are taking them right now
 function refreshModDots() {
@@ -3839,8 +4066,16 @@ function refreshModDots() {
   document.querySelectorAll('.knob').forEach(el => {
     const dot = el.querySelector('.moddot'), id = el.dataset.pid;
     if (!dot) return;
-    if (!(id in sum)) { dot.style.display = 'none'; return; }
+    const out = el.querySelector('.kval');
+    if (!(id in sum)) {
+      dot.style.display = 'none';
+      if (el.classList.contains('modded')) { el.classList.remove('modded'); if (out && el._fmt) out.textContent = el._fmt(state.params[id]); }
+      return;
+    }
     const v = clamp01(state.params[id] + sum[id]), a = A0 + v * SPAN;
+    // the value under the knob follows the wave live, in the accent colour while it's moving
+    el.classList.add('modded');
+    if (out && el._fmt) out.textContent = el._fmt(v);
     dot.setAttribute('cx', (32 + 28 * Math.cos(a)).toFixed(2));
     dot.setAttribute('cy', (32 + 28 * Math.sin(a)).toFixed(2));
     dot.style.display = '';
@@ -3898,6 +4133,49 @@ foldSection(q('section.song'), q('section.song .groove-title'), 'song');
 foldSection(q('#compPanel'), q('#compPanel .dedit-title'), 'compressor');
 foldSection(q('.dedit'), q('.dedit .dedit-title'), 'drumeditor');
 foldSection(q('section.modsec'), q('section.modsec .osc-label'), 'waves');
+
+// ===================== Keep the screen on while playing =====================
+// Ask the phone to keep the screen on while AcidBox plays (the Screen Wake Lock, as video players use),
+// and let it sleep normally once you stop. Phones drop the lock when you switch away, so it's asked for
+// again when you come back. Where the lock isn't allowed, a blank, silent, looping 2-second video does
+// the same job, the usual trick (it works on iPhones too).
+var WAKE_WEBM = 'data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAH9EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggHn7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECfQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYjaRepV8jaM5JyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhDuaygDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYjaRepV8jaM5GfIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDIuMDAwMDAwMDAwAB9DtnXD54EAo6OBAACAEAIAnQEqEAAQAABHCIWFiJmEiAICAAwNYAD+/6tQgKOZgQPoALEBAAEQEAAYADA/9AwAAAD+/6tQgBxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=';
+var WAKE_VIDEO = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAM1bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAl90cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAAAAHXbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABgm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAUJzdGJsAAAAwnN0c2QAAAAAAAAAAQAAALJhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAOGF2Y0MBZAAK/+EAGWdkAAqscgRewEQAAAMABAAAAwAIPEiWEYABAAho6EOBlEyEwP34+AAAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAALVAAAC1QAAAAYc3R0cwAAAAAAAAABAAAAAgAAQAAAAAAUc3RzcwAAAAAAAAABAAAAAQAAABxzdHNjAAAAAAAAAAEAAAABAAAAAgAAAAEAAAAcc3RzegAAAAAAAAAAAAAAAgAAAscAAAAOAAAAFHN0Y28AAAAAAAAAAQAAA2UAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJal0b28AAAAdZGF0YQAAAAEAAAAATGF2ZjYwLjE2LjEwMAAAAAhmcmVlAAAC3W1kYXQAAAKxBgX//63cRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY0IHIzMTA4IDMxZTE5ZjkgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDIzIC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MSByZWY9MTYgZGVibG9jaz0xOi0zOi0zIGFuYWx5c2U9MHgzOjB4MTMzIG1lPXVtaCBzdWJtZT0xMCBwc3k9MSBwc3lfcmQ9Mi4wMDowLjcwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTI0IGNocm9tYV9tZT0xIHRyZWxsaXM9MiA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tNCB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz04IGJfcHlyYW1pZD0yIGJfYWRhcHQ9MiBiX2JpYXM9MCBkaXJlY3Q9MyB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTEgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD02MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTUxLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjIwAIAAAAAOZYiBAAM5z/7Ad4FLRK0AAAAKQZoILYgxnP+rgA==';
+var awake = { lock: null, video: null, want: false };
+async function wakeOn() {
+  awake.want = true;
+  if (awake.lock) return;
+  try {
+    if ('wakeLock' in navigator) {
+      awake.lock = await navigator.wakeLock.request('screen');
+      awake.lock.addEventListener('release', () => { awake.lock = null; });
+      if (!awake.want) wakeOff();   // stopped while we were asking
+      return;
+    }
+  } catch (e) { awake.lock = null; }
+  try {
+    if (!awake.video) {
+      const v = document.createElement('video');
+      v.muted = true; v.loop = true;
+      v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true');
+      v.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+      // WebM for Chrome-based browsers, MP4 for iPhones and Safari
+      for (const [src, type] of [[WAKE_WEBM, 'video/webm'], [WAKE_VIDEO, 'video/mp4']]) {
+        const so = document.createElement('source'); so.src = src; so.type = type; v.appendChild(so);
+      }
+      document.body.appendChild(v);
+      awake.video = v;
+    }
+    await awake.video.play();
+    if (!awake.want) awake.video.pause();
+  } catch (e) {}
+}
+function wakeOff() {
+  awake.want = false;
+  if (awake.lock) { const l = awake.lock; awake.lock = null; l.release().catch(() => {}); }
+  if (awake.video) awake.video.pause();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && awake.want) wakeOn(); });
 </script>
 </body>
 </html>
