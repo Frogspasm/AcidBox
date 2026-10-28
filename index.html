@@ -207,10 +207,20 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
   .osc-row.pitch .osc-label { min-width: 0; width: 3.3em; white-space: normal; line-height: 1.15; }   /* "Osc 2" over "pitch" */
   #intervals button { padding: 0 7px; font-size: 13px; }
 }
-.osc-knobs { display: flex; justify-content: space-around; gap: 8px; }
+/* Knob spacing is set by the dial's size, not the label's: every knob box is exactly one dial wide,
+   knob rows are centred, and the gap between neighbouring knobs is one dial. Long labels overflow without
+   moving anything. --dial is the dial size (smaller on very small phones). */
+:root { --dial: 64px; }
+@media (max-width: 380px) { :root { --dial: 54px; } }
+.osc-knobs { display: flex; justify-content: center; gap: var(--dial); }
+.osc-knobs .knob { width: var(--dial); flex: none; }
+.osc-knobs .klabel, .osc-knobs .kval { white-space: nowrap; }
+/* phones: the five distortion types must fit the screen (tighter, and wrap if they still don't) */
+@media (max-width: 440px) { #distTypes { flex-wrap: wrap; border-radius: 24px; max-width: 100%; } #distTypes button { padding: 0 9px; font-size: 13px; } }
+/* small phones: the drum grid's 8 columns must fit inside its box */
+@media (max-width: 380px) { .ggrid { grid-template-columns: 4em repeat(8, minmax(0, 1fr)); gap: 4px; padding: 10px 4px; } .ggrid .gcell { min-width: 0; min-height: 0; width: 100%; } }
 @media (min-width: 760px), (orientation: landscape) and (min-width: 600px) {
   .osc { grid-template-columns: 1fr auto; align-items: center; }
-  .osc-knobs { gap: 24px; }
 }
 
 .seq { background: var(--panel); border-radius: 24px; padding: 14px 10px 18px; }
@@ -235,7 +245,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .fold[open] > .fold-head .fold-chev { transform: rotate(180deg); }
 .fold[open] > .fold-head { margin-bottom: 8px; }
 @media (prefers-reduced-motion: reduce) { .fold-chev { transition: none; } }
-.groove-knobs { display: flex; gap: 14px; }
+.groove-knobs { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin: 0 0 12px; }
 .groove-knobs .knob svg { width: 52px; height: 52px; }
 .drum-mix { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 0 0 14px; padding: 10px 0 8px; border-top: 2px solid var(--track); border-bottom: 2px solid var(--track); }
 .drum-mix .knob svg { width: 46px; height: 46px; }
@@ -318,6 +328,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .dedit-body { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .dedit-knobs { flex: 1 1 280px; min-width: 0; }
 .dedit-pane { display: flex; flex-wrap: wrap; gap: 10px 4px; }
+#deditKnobs .dedit-pane { justify-content: center; }   /* drum editor knobs centred on each row; spacing unchanged */
 .dedit-pane[hidden] { display: none; }
 .dedit-pane .knob { width: 74px; }
 .dedit-pane .knob svg { width: 52px; height: 52px; }
@@ -325,6 +336,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .comp { margin-top: 16px; padding-top: 14px; border-top: 2px solid var(--track); }
 .comp[data-on="false"] #compKnobs { opacity: .5; }
 #compKnobs .knob { width: 82px; }
+#compKnobs { justify-content: center; }   /* compressor knobs centred on each row; spacing unchanged */
 .dedit-hint { margin: 10px 2px 0; font-size: 13px; color: var(--ink-soft); }
 .drum-mix .klabel { font-size: 13px; text-align: center; line-height: 1.15; }
 @media (min-width: 760px), (orientation: landscape) and (min-width: 600px) {
@@ -449,10 +461,10 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .shift-pair { display: flex; gap: 4px; }
 /* bass pattern head: a section title, then centred lines: patterns, tools, length + shift */
-.seq .seqhead { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 10px; }
+.seq .seqhead, .groove .groove-head { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 10px; }
 .pat-title { margin: 0; min-width: 0; }
-.seqhead .headrow { display: flex; justify-content: center; }
-.seq .seqhead .tools { justify-content: center; }
+.seqhead .headrow, .groove-head .headrow { display: flex; justify-content: center; }
+.seq .seqhead .tools, .groove .groove-head .tools { justify-content: center; }
 .lenline { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; margin: -4px 0 12px; }
 .lenline .lenrow { margin: 0; }
 .shiftgrp { display: flex; align-items: center; gap: 8px; }
@@ -465,7 +477,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
   .lenline .lenrow .astep span { min-width: 1.6em; }
   .lenline .lenrow .unit { display: none; }
   .lenline .ghost.shift { width: 36px; }
-  .seqhead .seg button { min-width: 38px; padding: 0 9px; }
+  .seqhead .seg button, .groove-head .headrow .seg button { min-width: 38px; padding: 0 9px; }
   .seq .seqhead .tools { gap: 6px; }
   .seq .seqhead .tools .ghost { padding: 0 10px; font-size: 14px; }   /* Copy, Paste, Randomize, Clear on one line */
 }
@@ -582,7 +594,6 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
   .rig > .col-sound { grid-column: 1; }
   .rig > .col-pattern { grid-column: 2; }
   .col-sound .osc { grid-template-columns: 1fr; }
-  .col-sound .osc-knobs { justify-content: space-around; }
   .col-sound .knobs { grid-template-columns: repeat(5, 1fr); }
   .col-pattern .groove { margin-top: 14px; }
 }
@@ -707,22 +718,29 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
     </div>
   </section>
 
-  <section class="groove" aria-label="Groove">
+  <section class="groove" aria-label="Drum pattern">
     <div class="groove-head">
-      <h2 class="groove-title">Groove</h2>
-      <div class="bank-pick"><span class="bank-label">Drums</span><div class="pill seg" role="group" aria-label="Drum pattern" id="dbanks"></div></div>
-      <div class="groove-knobs" id="grooveKnobs"></div>
+      <h2 class="osc-label pat-title">Drum pattern</h2>
+      <div class="headrow">
+        <div class="pill seg" role="group" aria-label="Drum pattern" id="dbanks"></div>
+      </div>
       <div class="tools">
+        <button class="ghost" id="copyDrums">Copy</button>
+        <button class="ghost" id="pasteDrums" disabled>Paste</button>
+        <button class="ghost" id="clearDrums">Clear</button>
+      </div>
+    </div>
+    <div class="lenline">
+      <div class="lenrow" id="drumLen" role="group" aria-label="Drum pattern length"></div>
+      <div class="shiftgrp">
+        <span class="albl">Shift drums</span>
         <div class="shift-pair" role="group" aria-label="Shift drums">
           <button class="ghost shift" id="dShiftL" aria-label="Shift drums left" title="Shift drums left (wraps around)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <button class="ghost shift" id="dShiftR" aria-label="Shift drums right" title="Shift drums right (wraps around)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
-        <button class="ghost" id="copyDrums">Copy</button>
-        <button class="ghost" id="pasteDrums" disabled>Paste</button>
-        <button class="ghost" id="clearDrums">Clear drums</button>
       </div>
     </div>
-    <div class="lenrow" id="drumLen" role="group" aria-label="Drum pattern length"></div>
+    <div class="groove-knobs" id="grooveKnobs"></div>
     <div class="drum-mix" id="drumMix" role="group" aria-label="Drum levels"></div>
     <div class="ggrid" id="ggrid"></div>
     <div class="dedit">
